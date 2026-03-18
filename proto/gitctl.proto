@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package gitctl;
+
+option go_package = "github.com/justinsb/gitctl/proto";
+
+// GitCtl service provides GitHub operations
+service GitCtl {
+  // ListRepositories returns all repositories for a given username
+  rpc ListRepositories(ListRepositoriesRequest) returns (ListRepositoriesResponse);
+}
+
+// ListRepositoriesRequest contains the username to query
+message ListRepositoriesRequest {
+  string username = 1;
+}
+
+// ListRepositoriesResponse contains the list of repositories
+message ListRepositoriesResponse {
+  repeated Repository repositories = 1;
+}
+
+// Repository represents a GitHub repository
+message Repository {
+  string name = 1;
+  string full_name = 2;
+  string description = 3;
+  string html_url = 4;
+  bool private = 5;
+  bool fork = 6;
+  int32 stargazers_count = 7;
+  int32 forks_count = 8;
+  int32 open_issues_count = 9;
+  string language = 10;
+  string created_at = 11;
+  string updated_at = 12;
+  string pushed_at = 13;
+}
