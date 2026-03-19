@@ -2,14 +2,17 @@ package frontend
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	pb "github.com/justinsb/gitctl/proto"
+	"github.com/justinsb/gitctl/internal/api"
 )
 
 var (
@@ -20,11 +23,63 @@ var (
 	helpStyle         = list.DefaultStyles().HelpStyle.PaddingLeft(4).PaddingBottom(1)
 )
 
-type item struct {
-	repo *pb.Repository
+// Client is a minimal HTTP client that communicates with the gitctl backend
+// over a Unix domain socket using the Kubernetes wire protocol.
+type Client struct {
+	httpClient *http.Client
+	baseURL    string
 }
 
-func (i item) FilterValue() string { return i.repo.FullName }
+// NewClient creates a Client that dials the backend over the given Unix socket path.
+func NewClient(socketPath string) *Client {
+	transport := &http.Transport{
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
+		},
+	}
+	return &Client{
+		httpClient: &http.Client{Transport: transport},
+		// The hostname is a placeholder; the socket dialer ignores it.
+		baseURL: "http://localhost",
+	}
+}
+
+// ListGitRepos calls GET /apis/gitctl.justinsb.com/v1alpha1/gitrepos and returns
+// the parsed GitRepoList.
+func (c *Client) ListGitRepos(ctx context.Context, username string) ([]api.GitRepo, error) {
+	url := fmt.Sprintf("%s/apis/%s/%s/gitrepos?username=%s",
+		c.baseURL, api.Group, api.Version, username)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to contact backend: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("backend returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var repoList api.GitRepoList
+	if err := json.NewDecoder(resp.Body).Decode(&repoList); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return repoList.Items, nil
+}
+
+type item struct {
+	repo api.GitRepo
+}
+
+func (i item) FilterValue() string { return i.repo.Status.FullName }
 
 type itemDelegate struct{}
 
@@ -38,13 +93,13 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 	}
 
 	repo := i.repo
-	str := fmt.Sprintf("%s", repo.FullName)
-	if repo.Description != "" {
-		str += fmt.Sprintf("\n    %s", repo.Description)
+	displayText := repo.Status.FullName
+	if repo.Spec.Description != "" {
+		displayText += fmt.Sprintf("\n    %s", repo.Spec.Description)
 	}
-	str += fmt.Sprintf("\n    ⭐ %d | 🍴 %d", repo.StargazersCount, repo.ForksCount)
-	if repo.Language != "" {
-		str += fmt.Sprintf(" | %s", repo.Language)
+	displayText += fmt.Sprintf("\n    ⭐ %d | 🍴 %d", repo.Status.StargazersCount, repo.Status.ForksCount)
+	if repo.Status.Language != "" {
+		displayText += fmt.Sprintf(" | %s", repo.Status.Language)
 	}
 
 	fn := itemStyle.Render
@@ -54,27 +109,29 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 		}
 	}
 
-	fmt.Fprint(w, fn(str))
+	fmt.Fprint(w, fn(displayText))
 }
 
+// Model is the bubbletea model for the repository list TUI.
 type Model struct {
-	client   pb.GitCtlClient
+	client   *Client
 	username string
 	list     list.Model
-	repos    []*pb.Repository
+	repos    []api.GitRepo
 	loading  bool
 	err      error
 }
 
 type reposLoadedMsg struct {
-	repos []*pb.Repository
+	repos []api.GitRepo
 }
 
 type errMsg struct {
 	err error
 }
 
-func NewModel(client pb.GitCtlClient, username string) Model {
+// NewModel creates a new TUI Model using the given backend client and GitHub username.
+func NewModel(client *Client, username string) Model {
 	l := list.New([]list.Item{}, itemDelegate{}, 0, 0)
 	l.Title = fmt.Sprintf("Repositories for %s", username)
 	l.SetShowStatusBar(true)
@@ -95,16 +152,13 @@ func (m Model) Init() tea.Cmd {
 	return loadRepos(m.client, m.username)
 }
 
-func loadRepos(client pb.GitCtlClient, username string) tea.Cmd {
+func loadRepos(client *Client, username string) tea.Cmd {
 	return func() tea.Msg {
-		ctx := context.Background()
-		resp, err := client.ListRepositories(ctx, &pb.ListRepositoriesRequest{
-			Username: username,
-		})
+		repos, err := client.ListGitRepos(context.Background(), username)
 		if err != nil {
 			return errMsg{err}
 		}
-		return reposLoadedMsg{repos: resp.Repositories}
+		return reposLoadedMsg{repos: repos}
 	}
 }
 

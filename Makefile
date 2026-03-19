@@ -1,16 +1,7 @@
-.PHONY: proto build clean run-backend run-frontend test
+.PHONY: build clean run-backend run-frontend test
 
 # Default target
-all: proto build
-
-# Generate protobuf code
-proto:
-	@echo "Generating protobuf code..."
-	@PATH="$$PATH:$$(go env GOPATH)/bin" protoc \
-		--go_out=. --go_opt=paths=source_relative \
-		--go-grpc_out=. --go-grpc_opt=paths=source_relative \
-		proto/gitctl.proto
-	@echo "Protobuf code generated successfully"
+all: build
 
 # Build both binaries
 build:
@@ -41,13 +32,6 @@ run-frontend:
 test:
 	@echo "Running tests..."
 	@go test -v ./...
-
-# Install protoc plugins
-install-tools:
-	@echo "Installing protoc plugins..."
-	@go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-	@echo "Tools installed successfully"
 
 # Download dependencies
 deps:
