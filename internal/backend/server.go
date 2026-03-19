@@ -7,20 +7,20 @@ import (
 	"strings"
 
 	"github.com/justinsb/gitctl/internal/api"
-	"github.com/justinsb/gitctl/internal/github"
+	"github.com/justinsb/gitctl/internal/storage"
 )
 
 // Server is the HTTP server exposing the gitctl Kubernetes-style API.
 type Server struct {
-	githubClient *github.Client
-	mux          *http.ServeMux
+	store storage.GitRepoStore
+	mux   *http.ServeMux
 }
 
 // NewServer creates a new HTTP Server and registers its routes.
-func NewServer() *Server {
+func NewServer(store storage.GitRepoStore) *Server {
 	s := &Server{
-		githubClient: github.NewClient(),
-		mux:          http.NewServeMux(),
+		store: store,
+		mux:   http.NewServeMux(),
 	}
 
 	// LIST /apis/gitctl.justinsb.com/v1alpha1/gitrepos
@@ -50,7 +50,7 @@ func (s *Server) handleListGitRepos(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Listing repositories for username: %s", username)
 
-	repos, err := s.githubClient.ListRepositories(r.Context(), username)
+	repos, err := s.store.List(r.Context(), username)
 	if err != nil {
 		log.Printf("Error listing repositories: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
