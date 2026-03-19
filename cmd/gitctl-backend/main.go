@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -9,12 +10,18 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/justinsb/gitctl/internal/backend"
+	"github.com/justinsb/gitctl/internal/controller"
+	"github.com/justinsb/gitctl/internal/github"
+	"github.com/justinsb/gitctl/internal/storage/memorystorage"
 )
 
 var (
-	socketPath = flag.String("socket", "/tmp/gitctl.sock", "Unix domain socket path")
+	socketPath   = flag.String("socket", "/tmp/gitctl.sock", "Unix domain socket path")
+	username     = flag.String("username", "justinsb", "GitHub username to sync repositories for")
+	syncInterval = flag.Duration("sync-interval", 5*time.Minute, "How often to poll GitHub for repository updates")
 )
 
 func main() {
@@ -37,8 +44,20 @@ func main() {
 		log.Fatalf("Failed to chmod socket: %v", err)
 	}
 
+	// Set up storage and controller.
+	store := memorystorage.New()
+	githubClient := github.NewClient()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Start the controller to poll GitHub and populate storage.
+	ctrl := controller.NewGitRepoController(githubClient, store, *username, *syncInterval)
+	go ctrl.Run(ctx)
+
+	// Create the API server that reads from storage.
 	server := &http.Server{
-		Handler: backend.NewServer(),
+		Handler: backend.NewServer(store),
 	}
 
 	// Handle graceful shutdown
@@ -48,6 +67,7 @@ func main() {
 	go func() {
 		<-sigCh
 		fmt.Println("\nShutting down server...")
+		cancel()
 		if err := server.Close(); err != nil {
 			log.Printf("Error closing server: %v", err)
 		}
