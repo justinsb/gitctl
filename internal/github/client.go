@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	pb "github.com/justinsb/gitctl/proto"
+	"github.com/justinsb/gitctl/internal/api"
 )
 
 // Client is a GitHub API client
@@ -26,25 +26,26 @@ func NewClient() *Client {
 	}
 }
 
-// GitHubRepo represents a repository from the GitHub API
-type GitHubRepo struct {
+// githubRepo represents a repository from the GitHub API
+type githubRepo struct {
 	Name            string `json:"name"`
 	FullName        string `json:"full_name"`
 	Description     string `json:"description"`
 	HTMLURL         string `json:"html_url"`
 	Private         bool   `json:"private"`
 	Fork            bool   `json:"fork"`
-	StargazersCount int32  `json:"stargazers_count"`
-	ForksCount      int32  `json:"forks_count"`
-	OpenIssuesCount int32  `json:"open_issues_count"`
+	StargazersCount int    `json:"stargazers_count"`
+	ForksCount      int    `json:"forks_count"`
+	OpenIssuesCount int    `json:"open_issues_count"`
 	Language        string `json:"language"`
 	CreatedAt       string `json:"created_at"`
 	UpdatedAt       string `json:"updated_at"`
 	PushedAt        string `json:"pushed_at"`
 }
 
-// ListRepositories fetches all repositories for a given username
-func (c *Client) ListRepositories(ctx context.Context, username string) ([]*pb.Repository, error) {
+// ListRepositories fetches all repositories for a given username and returns
+// them as CRD-style GitRepo resources.
+func (c *Client) ListRepositories(ctx context.Context, username string) ([]api.GitRepo, error) {
 	url := fmt.Sprintf("%s/users/%s/repos?per_page=100", c.baseURL, username)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -64,28 +65,37 @@ func (c *Client) ListRepositories(ctx context.Context, username string) ([]*pb.R
 		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
 	}
 
-	var githubRepos []GitHubRepo
+	var githubRepos []githubRepo
 	if err := json.NewDecoder(resp.Body).Decode(&githubRepos); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	// Convert to protobuf format
-	repos := make([]*pb.Repository, len(githubRepos))
+	// Convert to CRD-style GitRepo resources.
+	// User-specified fields go into Spec; GitHub-generated fields go into Status.
+	repos := make([]api.GitRepo, len(githubRepos))
 	for i, gr := range githubRepos {
-		repos[i] = &pb.Repository{
-			Name:             gr.Name,
-			FullName:         gr.FullName,
-			Description:      gr.Description,
-			HtmlUrl:          gr.HTMLURL,
-			Private:          gr.Private,
-			Fork:             gr.Fork,
-			StargazersCount:  gr.StargazersCount,
-			ForksCount:       gr.ForksCount,
-			OpenIssuesCount:  gr.OpenIssuesCount,
-			Language:         gr.Language,
-			CreatedAt:        gr.CreatedAt,
-			UpdatedAt:        gr.UpdatedAt,
-			PushedAt:         gr.PushedAt,
+		repos[i] = api.GitRepo{
+			APIVersion: api.APIVersion,
+			Kind:       api.GitRepoKind,
+			Metadata: api.ObjectMeta{
+				Name: gr.Name,
+			},
+			Spec: api.GitRepoSpec{
+				Description: gr.Description,
+				Private:     gr.Private,
+			},
+			Status: api.GitRepoStatus{
+				FullName:        gr.FullName,
+				HTMLURL:         gr.HTMLURL,
+				Fork:            gr.Fork,
+				StargazersCount: gr.StargazersCount,
+				ForksCount:      gr.ForksCount,
+				OpenIssuesCount: gr.OpenIssuesCount,
+				Language:        gr.Language,
+				CreatedAt:       gr.CreatedAt,
+				UpdatedAt:       gr.UpdatedAt,
+				PushedAt:        gr.PushedAt,
+			},
 		}
 	}
 

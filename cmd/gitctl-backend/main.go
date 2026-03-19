@@ -5,13 +5,12 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/justinsb/gitctl/internal/backend"
-	pb "github.com/justinsb/gitctl/proto"
-	"google.golang.org/grpc"
 )
 
 var (
@@ -33,16 +32,14 @@ func main() {
 	}
 	defer os.Remove(*socketPath)
 
-	// Make socket accessible
+	// Make socket accessible to all users
 	if err := os.Chmod(*socketPath, 0666); err != nil {
 		log.Fatalf("Failed to chmod socket: %v", err)
 	}
 
-	// Create gRPC server
-	grpcServer := grpc.NewServer()
-
-	// Register GitCtl service
-	pb.RegisterGitCtlServer(grpcServer, backend.NewServer())
+	server := &http.Server{
+		Handler: backend.NewServer(),
+	}
 
 	// Handle graceful shutdown
 	sigCh := make(chan os.Signal, 1)
@@ -51,11 +48,13 @@ func main() {
 	go func() {
 		<-sigCh
 		fmt.Println("\nShutting down server...")
-		grpcServer.GracefulStop()
+		if err := server.Close(); err != nil {
+			log.Printf("Error closing server: %v", err)
+		}
 	}()
 
 	log.Printf("Backend server listening on %s", *socketPath)
-	if err := grpcServer.Serve(listener); err != nil {
+	if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("Failed to serve: %v", err)
 	}
 }
