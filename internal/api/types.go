@@ -11,6 +11,14 @@ const (
 	GitRepoKind = "GitRepo"
 	// GitRepoListKind is the Kind name for a list of GitRepo resources.
 	GitRepoListKind = "GitRepoList"
+	// PullRequestKind is the Kind name for a single PullRequest resource.
+	PullRequestKind = "PullRequest"
+	// PullRequestListKind is the Kind name for a list of PullRequest resources.
+	PullRequestListKind = "PullRequestList"
+	// IssueKind is the Kind name for a single Issue resource.
+	IssueKind = "Issue"
+	// IssueListKind is the Kind name for a list of Issue resources.
+	IssueListKind = "IssueList"
 	// APIVersion is the combined apiVersion field value.
 	APIVersion = Group + "/" + Version
 )
@@ -69,8 +77,102 @@ type GitRepo struct {
 
 // GitRepoList is a list of GitRepo resources, following the Kubernetes list convention.
 type GitRepoList struct {
-	APIVersion string     `json:"apiVersion,omitempty"`
-	Kind       string     `json:"kind,omitempty"`
-	Metadata   ListMeta   `json:"metadata,omitempty"`
-	Items      []GitRepo  `json:"items"`
+	APIVersion string    `json:"apiVersion,omitempty"`
+	Kind       string    `json:"kind,omitempty"`
+	Metadata   ListMeta  `json:"metadata,omitempty"`
+	Items      []GitRepo `json:"items"`
+}
+
+// PullRequestSpec contains user-specified fields for a pull request.
+type PullRequestSpec struct {
+	Title string `json:"title,omitempty"`
+	Body  string `json:"body,omitempty"`
+}
+
+// PullRequestStatus contains GitHub-generated (observed) fields for a pull request.
+type PullRequestStatus struct {
+	// Repo is the "owner/repo" qualified name.
+	Repo string `json:"repo,omitempty"`
+	// Number is the PR number within the repository.
+	Number int `json:"number,omitempty"`
+	// State is the PR state (open, closed).
+	State string `json:"state,omitempty"`
+	// Author is the GitHub username who created the PR.
+	Author string `json:"author,omitempty"`
+	// Assignees are the GitHub usernames assigned to the PR.
+	Assignees []string `json:"assignees,omitempty"`
+	// HTMLURL is the browser URL for the pull request.
+	HTMLURL string `json:"htmlUrl,omitempty"`
+	// Draft indicates whether this is a draft PR.
+	Draft bool `json:"draft,omitempty"`
+	// Merged indicates whether the PR has been merged.
+	Merged bool `json:"merged,omitempty"`
+	// Labels are the label names applied to the PR.
+	Labels []string `json:"labels,omitempty"`
+	// CreatedAt is the RFC 3339 timestamp when the PR was created.
+	CreatedAt string `json:"createdAt,omitempty"`
+	// UpdatedAt is the RFC 3339 timestamp of the last update.
+	UpdatedAt string `json:"updatedAt,omitempty"`
+}
+
+// PullRequest represents a GitHub pull request as a Kubernetes-style CRD resource.
+type PullRequest struct {
+	APIVersion string              `json:"apiVersion,omitempty"`
+	Kind       string              `json:"kind,omitempty"`
+	Metadata   ObjectMeta          `json:"metadata,omitempty"`
+	Spec       PullRequestSpec     `json:"spec,omitempty"`
+	Status     PullRequestStatus   `json:"status,omitempty"`
+}
+
+// PullRequestList is a list of PullRequest resources.
+type PullRequestList struct {
+	APIVersion string          `json:"apiVersion,omitempty"`
+	Kind       string          `json:"kind,omitempty"`
+	Metadata   ListMeta        `json:"metadata,omitempty"`
+	Items      []PullRequest   `json:"items"`
+}
+
+// IssueSpec contains user-specified fields for an issue.
+type IssueSpec struct {
+	Title string `json:"title,omitempty"`
+	Body  string `json:"body,omitempty"`
+}
+
+// IssueStatus contains GitHub-generated (observed) fields for an issue.
+type IssueStatus struct {
+	// Repo is the "owner/repo" qualified name.
+	Repo string `json:"repo,omitempty"`
+	// Number is the issue number within the repository.
+	Number int `json:"number,omitempty"`
+	// State is the issue state (open, closed).
+	State string `json:"state,omitempty"`
+	// Author is the GitHub username who created the issue.
+	Author string `json:"author,omitempty"`
+	// Assignees are the GitHub usernames assigned to the issue.
+	Assignees []string `json:"assignees,omitempty"`
+	// HTMLURL is the browser URL for the issue.
+	HTMLURL string `json:"htmlUrl,omitempty"`
+	// Labels are the label names applied to the issue.
+	Labels []string `json:"labels,omitempty"`
+	// CreatedAt is the RFC 3339 timestamp when the issue was created.
+	CreatedAt string `json:"createdAt,omitempty"`
+	// UpdatedAt is the RFC 3339 timestamp of the last update.
+	UpdatedAt string `json:"updatedAt,omitempty"`
+}
+
+// Issue represents a GitHub issue as a Kubernetes-style CRD resource.
+type Issue struct {
+	APIVersion string      `json:"apiVersion,omitempty"`
+	Kind       string      `json:"kind,omitempty"`
+	Metadata   ObjectMeta  `json:"metadata,omitempty"`
+	Spec       IssueSpec   `json:"spec,omitempty"`
+	Status     IssueStatus `json:"status,omitempty"`
+}
+
+// IssueList is a list of Issue resources.
+type IssueList struct {
+	APIVersion string    `json:"apiVersion,omitempty"`
+	Kind       string    `json:"kind,omitempty"`
+	Metadata   ListMeta  `json:"metadata,omitempty"`
+	Items      []Issue   `json:"items"`
 }

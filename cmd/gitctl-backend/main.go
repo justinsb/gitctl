@@ -45,19 +45,25 @@ func main() {
 		log.Fatalf("Failed to chmod socket: %v", err)
 	}
 
-	// Set up storage and controller.
+	// Set up storage and controllers.
 	store := memorystorage.New()
 	githubClient := github.NewClient()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Start the controller to poll GitHub and populate storage.
-	ctrl := controller.NewGitRepoController(githubClient, store, *username, *syncInterval)
-	go ctrl.Run(ctx)
+	// Start the controllers to poll GitHub and populate storage.
+	repoCtrl := controller.NewGitRepoController(githubClient, store, *username, *syncInterval)
+	go repoCtrl.Run(ctx)
+
+	prCtrl := controller.NewPullRequestController(githubClient, store, *username, *syncInterval)
+	go prCtrl.Run(ctx)
+
+	issueCtrl := controller.NewIssueController(githubClient, store, *username, *syncInterval)
+	go issueCtrl.Run(ctx)
 
 	// Create the API handler that reads from storage.
-	handler := backend.NewServer(store)
+	handler := backend.NewServer(store, store, store)
 
 	// Start Unix socket server.
 	unixServer := &http.Server{Handler: handler}

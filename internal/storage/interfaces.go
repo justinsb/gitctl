@@ -18,3 +18,23 @@ type GitRepoStore interface {
 	// This is used by controllers to sync the full state from an external source.
 	ReplaceAll(ctx context.Context, username string, repos []api.GitRepo) error
 }
+
+// PullRequestStore provides read and write access to PullRequest resources.
+// The key parameter is a scoped identifier like "outbound:username" or "assigned:username".
+type PullRequestStore interface {
+	// ListPullRequests returns all PullRequest resources for the given key.
+	ListPullRequests(ctx context.Context, key string) ([]api.PullRequest, error)
+
+	// ReplaceAllPullRequests atomically replaces all PullRequest resources for a key.
+	ReplaceAllPullRequests(ctx context.Context, key string, prs []api.PullRequest) error
+}
+
+// IssueStore provides read and write access to Issue resources.
+// The key parameter is a scoped identifier like "assigned:username".
+type IssueStore interface {
+	// ListIssues returns all Issue resources for the given key.
+	ListIssues(ctx context.Context, key string) ([]api.Issue, error)
+
+	// ReplaceAllIssues atomically replaces all Issue resources for a key.
+	ReplaceAllIssues(ctx context.Context, key string, issues []api.Issue) error
+}

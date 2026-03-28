@@ -43,3 +43,77 @@ struct GitRepoList: Codable {
     var metadata: ListMeta?
     var items: [GitRepo]
 }
+
+// MARK: - PullRequest
+
+struct PullRequestSpec: Codable {
+    var title: String?
+    var body: String?
+}
+
+struct PullRequestStatus: Codable {
+    var repo: String?
+    var number: Int?
+    var state: String?
+    var author: String?
+    var assignees: [String]?
+    var htmlUrl: String?
+    var draft: Bool?
+    var merged: Bool?
+    var labels: [String]?
+    var createdAt: String?
+    var updatedAt: String?
+}
+
+struct PullRequest: Codable, Identifiable {
+    var apiVersion: String?
+    var kind: String?
+    var metadata: ObjectMeta?
+    var spec: PullRequestSpec?
+    var status: PullRequestStatus?
+
+    var id: String { metadata?.name ?? UUID().uuidString }
+}
+
+struct PullRequestList: Codable {
+    var apiVersion: String?
+    var kind: String?
+    var metadata: ListMeta?
+    var items: [PullRequest]
+}
+
+// MARK: - Issue
+
+struct IssueSpec: Codable {
+    var title: String?
+    var body: String?
+}
+
+struct IssueStatus: Codable {
+    var repo: String?
+    var number: Int?
+    var state: String?
+    var author: String?
+    var assignees: [String]?
+    var htmlUrl: String?
+    var labels: [String]?
+    var createdAt: String?
+    var updatedAt: String?
+}
+
+struct Issue: Codable, Identifiable {
+    var apiVersion: String?
+    var kind: String?
+    var metadata: ObjectMeta?
+    var spec: IssueSpec?
+    var status: IssueStatus?
+
+    var id: String { metadata?.name ?? UUID().uuidString }
+}
+
+struct IssueList: Codable {
+    var apiVersion: String?
+    var kind: String?
+    var metadata: ListMeta?
+    var items: [Issue]
+}

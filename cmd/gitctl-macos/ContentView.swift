@@ -1,6 +1,202 @@
 import SwiftUI
 
+enum SidebarItem: String, CaseIterable, Identifiable {
+    case feed = "Feed"
+    case assigned = "Assigned"
+    case repos = "Repositories"
+
+    var id: String { rawValue }
+
+    var systemImage: String {
+        switch self {
+        case .feed: return "arrow.up.circle"
+        case .assigned: return "person.circle"
+        case .repos: return "folder"
+        }
+    }
+}
+
 struct ContentView: View {
+    @State private var selection: SidebarItem? = .feed
+
+    var body: some View {
+        NavigationSplitView {
+            List(selection: $selection) {
+                ForEach(SidebarItem.allCases) { item in
+                    NavigationLink(value: item) {
+                        Label(item.rawValue, systemImage: item.systemImage)
+                    }
+                }
+            }
+            .navigationTitle("gitctl")
+        } detail: {
+            switch selection {
+            case .feed:
+                FeedView()
+            case .assigned:
+                AssignedView()
+            case .repos:
+                ReposView()
+            case nil:
+                Text("Select a section")
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+// MARK: - Feed View (Outbound PRs)
+
+struct FeedView: View {
+    @State private var prs: [PullRequest] = []
+    @State private var isLoading = true
+    @State private var errorMessage: String?
+    @State private var searchText = ""
+
+    private let client = GitCtlClient()
+    private let username = "justinsb"
+
+    var filteredPRs: [PullRequest] {
+        if searchText.isEmpty { return prs }
+        return prs.filter { pr in
+            let title = pr.spec?.title ?? ""
+            let repo = pr.status?.repo ?? ""
+            return title.localizedCaseInsensitiveContains(searchText)
+                || repo.localizedCaseInsensitiveContains(searchText)
+        }
+    }
+
+    var body: some View {
+        Group {
+            if isLoading {
+                ProgressView("Loading feed...")
+            } else if let error = errorMessage {
+                ErrorView(message: error) { Task { await load() } }
+            } else {
+                List(filteredPRs) { pr in
+                    PRRow(pr: pr)
+                }
+            }
+        }
+        .navigationTitle("Feed")
+        .searchable(text: $searchText, prompt: "Filter PRs")
+        .toolbar {
+            ToolbarItem(placement: .automatic) {
+                Button(action: { Task { await load() } }) {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .help("Refresh")
+            }
+        }
+        .task { await load() }
+    }
+
+    func load() async {
+        isLoading = true
+        errorMessage = nil
+        do {
+            prs = try await client.listPullRequests(username: username, scope: "outbound")
+            isLoading = false
+        } catch {
+            errorMessage = "Failed to load feed: \(error.localizedDescription)\n\nMake sure the backend is running:\n  go run cmd/gitctl-backend/main.go"
+            isLoading = false
+        }
+    }
+}
+
+// MARK: - Assigned View (PRs + Issues assigned to me)
+
+struct AssignedView: View {
+    @State private var prs: [PullRequest] = []
+    @State private var issues: [Issue] = []
+    @State private var isLoading = true
+    @State private var errorMessage: String?
+    @State private var searchText = ""
+
+    private let client = GitCtlClient()
+    private let username = "justinsb"
+
+    var filteredPRs: [PullRequest] {
+        if searchText.isEmpty { return prs }
+        return prs.filter { pr in
+            let title = pr.spec?.title ?? ""
+            let repo = pr.status?.repo ?? ""
+            return title.localizedCaseInsensitiveContains(searchText)
+                || repo.localizedCaseInsensitiveContains(searchText)
+        }
+    }
+
+    var filteredIssues: [Issue] {
+        if searchText.isEmpty { return issues }
+        return issues.filter { issue in
+            let title = issue.spec?.title ?? ""
+            let repo = issue.status?.repo ?? ""
+            return title.localizedCaseInsensitiveContains(searchText)
+                || repo.localizedCaseInsensitiveContains(searchText)
+        }
+    }
+
+    var body: some View {
+        Group {
+            if isLoading {
+                ProgressView("Loading assigned items...")
+            } else if let error = errorMessage {
+                ErrorView(message: error) { Task { await load() } }
+            } else {
+                List {
+                    if !filteredPRs.isEmpty {
+                        Section("Pull Requests") {
+                            ForEach(filteredPRs) { pr in
+                                PRRow(pr: pr)
+                            }
+                        }
+                    }
+                    if !filteredIssues.isEmpty {
+                        Section("Issues") {
+                            ForEach(filteredIssues) { issue in
+                                IssueRow(issue: issue)
+                            }
+                        }
+                    }
+                    if filteredPRs.isEmpty && filteredIssues.isEmpty {
+                        Text("No items assigned to you")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .navigationTitle("Assigned")
+        .searchable(text: $searchText, prompt: "Filter items")
+        .toolbar {
+            ToolbarItem(placement: .automatic) {
+                Button(action: { Task { await load() } }) {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .help("Refresh")
+            }
+        }
+        .task { await load() }
+    }
+
+    func load() async {
+        isLoading = true
+        errorMessage = nil
+        do {
+            async let fetchPRs = client.listPullRequests(username: username, scope: "assigned")
+            async let fetchIssues = client.listIssues(username: username, scope: "assigned")
+            prs = try await fetchPRs
+            issues = try await fetchIssues
+            isLoading = false
+        } catch {
+            errorMessage = "Failed to load assigned items: \(error.localizedDescription)\n\nMake sure the backend is running:\n  go run cmd/gitctl-backend/main.go"
+            isLoading = false
+        }
+    }
+}
+
+// MARK: - Repos View
+
+struct ReposView: View {
     @State private var repos: [GitRepo] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
@@ -10,9 +206,7 @@ struct ContentView: View {
     private let username = "justinsb"
 
     var filteredRepos: [GitRepo] {
-        if searchText.isEmpty {
-            return repos
-        }
+        if searchText.isEmpty { return repos }
         return repos.filter { repo in
             let name = repo.metadata?.name ?? ""
             let desc = repo.spec?.description ?? ""
@@ -22,44 +216,31 @@ struct ContentView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
-            Group {
-                if isLoading {
-                    ProgressView("Loading repositories...")
-                } else if let error = errorMessage {
-                    VStack(spacing: 12) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.largeTitle)
-                            .foregroundStyle(.secondary)
-                        Text(error)
-                            .foregroundStyle(.secondary)
-                        Button("Retry") { Task { await loadRepos() } }
-                    }
-                    .padding()
-                } else {
-                    List(filteredRepos) { repo in
-                        RepoRow(repo: repo)
-                    }
+        Group {
+            if isLoading {
+                ProgressView("Loading repositories...")
+            } else if let error = errorMessage {
+                ErrorView(message: error) { Task { await load() } }
+            } else {
+                List(filteredRepos) { repo in
+                    RepoRow(repo: repo)
                 }
             }
-            .navigationTitle("Repositories")
-            .searchable(text: $searchText, prompt: "Filter repos")
-            .toolbar {
-                ToolbarItem(placement: .automatic) {
-                    Button(action: { Task { await loadRepos() } }) {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .help("Refresh")
-                }
-            }
-        } detail: {
-            Text("Select a repository")
-                .foregroundStyle(.secondary)
         }
-        .task { await loadRepos() }
+        .navigationTitle("Repositories")
+        .searchable(text: $searchText, prompt: "Filter repos")
+        .toolbar {
+            ToolbarItem(placement: .automatic) {
+                Button(action: { Task { await load() } }) {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .help("Refresh")
+            }
+        }
+        .task { await load() }
     }
 
-    func loadRepos() async {
+    func load() async {
         isLoading = true
         errorMessage = nil
         do {
@@ -69,6 +250,106 @@ struct ContentView: View {
             errorMessage = "Failed to load repos: \(error.localizedDescription)\n\nMake sure the backend is running:\n  go run cmd/gitctl-backend/main.go"
             isLoading = false
         }
+    }
+}
+
+// MARK: - Row Views
+
+struct PRRow: View {
+    let pr: PullRequest
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("\(pr.status?.repo ?? "")#\(pr.status?.number ?? 0)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(pr.spec?.title ?? "untitled")
+                    .font(.headline)
+                    .lineLimit(1)
+                Spacer()
+                if pr.status?.draft == true {
+                    Text("Draft")
+                        .font(.caption2)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.quaternary)
+                        .clipShape(Capsule())
+                }
+                if pr.status?.merged == true {
+                    Text("Merged")
+                        .font(.caption2)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.purple.opacity(0.2))
+                        .clipShape(Capsule())
+                }
+            }
+
+            HStack(spacing: 12) {
+                Label(pr.status?.author ?? "", systemImage: "person")
+                if let updated = pr.status?.updatedAt, updated.count >= 10 {
+                    Label(String(updated.prefix(10)), systemImage: "clock")
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            if let labels = pr.status?.labels, !labels.isEmpty {
+                HStack(spacing: 4) {
+                    ForEach(labels, id: \.self) { label in
+                        Text(label)
+                            .font(.caption2)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1)
+                            .background(.blue.opacity(0.15))
+                            .clipShape(Capsule())
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+struct IssueRow: View {
+    let issue: Issue
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("\(issue.status?.repo ?? "")#\(issue.status?.number ?? 0)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(issue.spec?.title ?? "untitled")
+                    .font(.headline)
+                    .lineLimit(1)
+                Spacer()
+            }
+
+            HStack(spacing: 12) {
+                Label(issue.status?.author ?? "", systemImage: "person")
+                if let updated = issue.status?.updatedAt, updated.count >= 10 {
+                    Label(String(updated.prefix(10)), systemImage: "clock")
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            if let labels = issue.status?.labels, !labels.isEmpty {
+                HStack(spacing: 4) {
+                    ForEach(labels, id: \.self) { label in
+                        Text(label)
+                            .font(.caption2)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1)
+                            .background(.blue.opacity(0.15))
+                            .clipShape(Capsule())
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
     }
 }
 
@@ -107,5 +388,24 @@ struct RepoRow: View {
             .foregroundStyle(.secondary)
         }
         .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Shared Components
+
+struct ErrorView: View {
+    let message: String
+    let retry: () -> Void
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+            Text(message)
+                .foregroundStyle(.secondary)
+            Button("Retry", action: retry)
+        }
+        .padding()
     }
 }
