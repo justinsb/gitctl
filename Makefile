@@ -1,4 +1,4 @@
-.PHONY: build clean run-backend run-frontend test
+aaccacdd.PHONY: build clean run-backend run-frontend run-macos test
 
 # Default target
 all: build
@@ -27,6 +27,19 @@ run-backend:
 run-frontend:
 	@echo "Starting frontend TUI..."
 	@go run cmd/gitctl/main.go
+
+# Build macOS app bundle
+build-macos:
+	@echo "Building macOS app..."
+	@cd cmd/gitctl-macos && swift build
+	@mkdir -p bin/GitCtl.app/Contents/MacOS
+	@cp cmd/gitctl-macos/.build/debug/GitCtl bin/GitCtl.app/Contents/MacOS/
+	@cp cmd/gitctl-macos/Info.plist bin/GitCtl.app/Contents/
+	@echo "Built bin/GitCtl.app"
+
+# Build and run macOS native app
+run-macos: build-macos
+	@open bin/GitCtl.app
 
 # Run tests
 test:

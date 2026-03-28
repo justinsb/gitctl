@@ -20,6 +20,7 @@ import (
 
 var (
 	socketPath   = flag.String("socket", "/tmp/gitctl.sock", "Unix domain socket path")
+	tcpAddr      = flag.String("tcp", "127.0.0.1:8484", "TCP address to listen on (empty to disable)")
 	username     = flag.String("username", "justinsb", "GitHub username to sync repositories for")
 	syncInterval = flag.Duration("sync-interval", 5*time.Minute, "How often to poll GitHub for repository updates")
 )
@@ -55,26 +56,47 @@ func main() {
 	ctrl := controller.NewGitRepoController(githubClient, store, *username, *syncInterval)
 	go ctrl.Run(ctx)
 
-	// Create the API server that reads from storage.
-	server := &http.Server{
-		Handler: backend.NewServer(store),
+	// Create the API handler that reads from storage.
+	handler := backend.NewServer(store)
+
+	// Start Unix socket server.
+	unixServer := &http.Server{Handler: handler}
+	go func() {
+		log.Printf("Backend server listening on %s", *socketPath)
+		if err := unixServer.Serve(listener); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Failed to serve on Unix socket: %v", err)
+		}
+	}()
+
+	// Optionally start TCP server (for non-Unix-socket clients like the macOS app).
+	var tcpServer *http.Server
+	if *tcpAddr != "" {
+		tcpListener, err := net.Listen("tcp", *tcpAddr)
+		if err != nil {
+			log.Fatalf("Failed to listen on %s: %v", *tcpAddr, err)
+		}
+		tcpServer = &http.Server{Handler: handler}
+		go func() {
+			log.Printf("Backend server listening on %s", *tcpAddr)
+			if err := tcpServer.Serve(tcpListener); err != nil && err != http.ErrServerClosed {
+				log.Fatalf("Failed to serve on TCP: %v", err)
+			}
+		}()
 	}
 
 	// Handle graceful shutdown
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 
-	go func() {
-		<-sigCh
-		fmt.Println("\nShutting down server...")
-		cancel()
-		if err := server.Close(); err != nil {
-			log.Printf("Error closing server: %v", err)
+	<-sigCh
+	fmt.Println("\nShutting down server...")
+	cancel()
+	if err := unixServer.Close(); err != nil {
+		log.Printf("Error closing Unix server: %v", err)
+	}
+	if tcpServer != nil {
+		if err := tcpServer.Close(); err != nil {
+			log.Printf("Error closing TCP server: %v", err)
 		}
-	}()
-
-	log.Printf("Backend server listening on %s", *socketPath)
-	if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("Failed to serve: %v", err)
 	}
 }

@@ -61,8 +61,14 @@ gitctl/
 ├── cmd/
 │   ├── gitctl-backend/    # Backend server
 │   │   └── main.go
-│   └── gitctl/            # Frontend TUI
-│       └── main.go
+│   ├── gitctl/            # Frontend TUI
+│   │   └── main.go
+│   └── gitctl-macos/      # macOS native SwiftUI frontend
+│       ├── Package.swift
+│       ├── GitCtlApp.swift
+│       ├── Models.swift
+│       ├── GitCtlClient.swift
+│       └── ContentView.swift
 ├── internal/
 │   ├── api/               # Kubernetes CRD-style type definitions
 │   ├── backend/           # API server (reads from storage)
