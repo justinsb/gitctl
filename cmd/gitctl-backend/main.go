@@ -56,14 +56,14 @@ func main() {
 	repoCtrl := controller.NewGitRepoController(githubClient, store, *username, *syncInterval)
 	go repoCtrl.Run(ctx)
 
-	prCtrl := controller.NewPullRequestController(githubClient, store, *username, *syncInterval)
+	prCtrl := controller.NewPullRequestController(githubClient, store, store, *username, *syncInterval)
 	go prCtrl.Run(ctx)
 
-	issueCtrl := controller.NewIssueController(githubClient, store, *username, *syncInterval)
+	issueCtrl := controller.NewIssueController(githubClient, store, store, *username, *syncInterval)
 	go issueCtrl.Run(ctx)
 
 	// Create the API handler that reads from storage.
-	handler := backend.NewServer(store, store, store, githubClient)
+	handler := backend.NewServer(store, store, store, store, githubClient)
 
 	// Start Unix socket server.
 	unixServer := &http.Server{Handler: handler}

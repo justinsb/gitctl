@@ -1,11 +1,14 @@
 package backend
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/justinsb/gitctl/internal/api"
 	"github.com/justinsb/gitctl/internal/github"
@@ -17,16 +20,18 @@ type Server struct {
 	repoStore    storage.GitRepoStore
 	prStore      storage.PullRequestStore
 	issueStore   storage.IssueStore
+	commentStore storage.CommentStore
 	githubClient *github.Client
 	mux          *http.ServeMux
 }
 
 // NewServer creates a new HTTP Server and registers its routes.
-func NewServer(repoStore storage.GitRepoStore, prStore storage.PullRequestStore, issueStore storage.IssueStore, githubClient *github.Client) *Server {
+func NewServer(repoStore storage.GitRepoStore, prStore storage.PullRequestStore, issueStore storage.IssueStore, commentStore storage.CommentStore, githubClient *github.Client) *Server {
 	s := &Server{
 		repoStore:    repoStore,
 		prStore:      prStore,
 		issueStore:   issueStore,
+		commentStore: commentStore,
 		githubClient: githubClient,
 		mux:          http.NewServeMux(),
 	}
@@ -172,17 +177,14 @@ func (s *Server) handleListIssues(w http.ResponseWriter, r *http.Request) {
 
 // handleListComments handles GET /apis/gitctl.justinsb.com/v1alpha1/comments.
 // Query parameters: repo (required, e.g. "owner/repo"), number (required, issue/PR number).
-// Comments are fetched directly from GitHub rather than from storage.
+// Comments are cached in storage after first fetch from GitHub.
 func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
-	log.Printf("handleListComments: method=%s path=%s rawQuery=%s", r.Method, r.URL.Path, r.URL.RawQuery)
-
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	repo := strings.TrimSpace(r.URL.Query().Get("repo"))
-	log.Printf("handleListComments: parsed repo=%q", repo)
 	if repo == "" {
 		http.Error(w, "repo query parameter is required", http.StatusBadRequest)
 		return
@@ -200,16 +202,44 @@ func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Listing comments for %s#%d", repo, number)
+	key := fmt.Sprintf("%s#%d", repo, number)
+	log.Printf("Listing comments for %s", key)
 
-	comments, err := s.githubClient.ListIssueComments(r.Context(), repo, number)
+	// Check cache first.
+	comments, cached, err := s.commentStore.ListComments(r.Context(), key)
 	if err != nil {
-		log.Printf("Error listing comments: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		log.Printf("Error reading comments from cache: %v", err)
 	}
 
-	log.Printf("Found %d comments for %s#%d", len(comments), repo, number)
+	if !cached {
+		// Cache miss: fetch from GitHub and store.
+		comments, err = s.githubClient.ListIssueComments(r.Context(), repo, number)
+		if err != nil {
+			log.Printf("Error listing comments: %v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		if storeErr := s.commentStore.ReplaceAllComments(r.Context(), key, comments); storeErr != nil {
+			log.Printf("Error caching comments: %v", storeErr)
+		}
+	} else {
+		// Cache hit: refresh in the background for next time.
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			fresh, err := s.githubClient.ListIssueComments(ctx, repo, number)
+			if err != nil {
+				log.Printf("Error refreshing comments for %s: %v", key, err)
+				return
+			}
+			if storeErr := s.commentStore.ReplaceAllComments(ctx, key, fresh); storeErr != nil {
+				log.Printf("Error storing refreshed comments for %s: %v", key, storeErr)
+			}
+		}()
+	}
+
+	log.Printf("Found %d comments for %s (cached=%v)", len(comments), key, cached)
 
 	list := api.CommentList{
 		APIVersion: api.APIVersion,

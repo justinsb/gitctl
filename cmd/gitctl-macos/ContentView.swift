@@ -308,7 +308,7 @@ struct PRDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            LazyVStack(alignment: .leading, spacing: 16) {
                 // Header
                 VStack(alignment: .leading, spacing: 8) {
                     Text("\(pr.status?.repo ?? "")#\(pr.status?.number ?? 0)")
@@ -424,7 +424,7 @@ struct IssueDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            LazyVStack(alignment: .leading, spacing: 16) {
                 // Header
                 VStack(alignment: .leading, spacing: 8) {
                     Text("\(issue.status?.repo ?? "")#\(issue.status?.number ?? 0)")

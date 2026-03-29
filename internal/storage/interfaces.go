@@ -38,3 +38,13 @@ type IssueStore interface {
 	// ReplaceAllIssues atomically replaces all Issue resources for a key.
 	ReplaceAllIssues(ctx context.Context, key string, issues []api.Issue) error
 }
+
+// CommentStore provides read and write access to Comment resources.
+// The key parameter is "repo#number" (e.g. "owner/repo#123").
+type CommentStore interface {
+	// ListComments returns cached comments for the given key, or nil if not cached.
+	ListComments(ctx context.Context, key string) ([]api.Comment, bool, error)
+
+	// ReplaceAllComments atomically replaces all comments for a key.
+	ReplaceAllComments(ctx context.Context, key string, comments []api.Comment) error
+}

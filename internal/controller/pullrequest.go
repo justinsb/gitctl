@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
@@ -14,15 +15,17 @@ import (
 type PullRequestController struct {
 	githubClient *github.Client
 	store        storage.PullRequestStore
+	commentStore storage.CommentStore
 	username     string
 	interval     time.Duration
 }
 
 // NewPullRequestController creates a new controller that syncs PRs for the given username.
-func NewPullRequestController(client *github.Client, store storage.PullRequestStore, username string, interval time.Duration) *PullRequestController {
+func NewPullRequestController(client *github.Client, store storage.PullRequestStore, commentStore storage.CommentStore, username string, interval time.Duration) *PullRequestController {
 	return &PullRequestController{
 		githubClient: client,
 		store:        store,
+		commentStore: commentStore,
 		username:     username,
 		interval:     interval,
 	}
@@ -72,6 +75,28 @@ func (c *PullRequestController) sync(ctx context.Context) {
 			log.Printf("PullRequestController: error storing assigned PRs: %v", err)
 		} else {
 			log.Printf("PullRequestController: synced %d assigned PRs for %s", len(assigned), c.username)
+		}
+	}
+
+	// Pre-fetch comments for all synced PRs.
+	allPRs := append(outbound, assigned...)
+	seen := make(map[string]bool)
+	for _, pr := range allPRs {
+		if pr.Status.Repo == "" || pr.Status.Number == 0 {
+			continue
+		}
+		key := fmt.Sprintf("%s#%d", pr.Status.Repo, pr.Status.Number)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		comments, err := c.githubClient.ListIssueComments(ctx, pr.Status.Repo, pr.Status.Number)
+		if err != nil {
+			log.Printf("PullRequestController: error fetching comments for %s: %v", key, err)
+			continue
+		}
+		if err := c.commentStore.ReplaceAllComments(ctx, key, comments); err != nil {
+			log.Printf("PullRequestController: error storing comments for %s: %v", key, err)
 		}
 	}
 }

@@ -13,21 +13,24 @@ import (
 var _ storage.GitRepoStore = &MemoryStore{}
 var _ storage.PullRequestStore = &MemoryStore{}
 var _ storage.IssueStore = &MemoryStore{}
+var _ storage.CommentStore = &MemoryStore{}
 
 // MemoryStore is a thread-safe in-memory store for all resource types.
 type MemoryStore struct {
-	mu    sync.RWMutex
-	repos map[string][]api.GitRepo      // keyed by username
-	prs   map[string][]api.PullRequest  // keyed by scope (e.g. "outbound:user")
-	issues map[string][]api.Issue        // keyed by scope (e.g. "assigned:user")
+	mu       sync.RWMutex
+	repos    map[string][]api.GitRepo      // keyed by username
+	prs      map[string][]api.PullRequest  // keyed by scope (e.g. "outbound:user")
+	issues   map[string][]api.Issue        // keyed by scope (e.g. "assigned:user")
+	comments map[string][]api.Comment      // keyed by "repo#number"
 }
 
 // New creates a new MemoryStore.
 func New() *MemoryStore {
 	return &MemoryStore{
-		repos:  make(map[string][]api.GitRepo),
-		prs:    make(map[string][]api.PullRequest),
-		issues: make(map[string][]api.Issue),
+		repos:    make(map[string][]api.GitRepo),
+		prs:      make(map[string][]api.PullRequest),
+		issues:   make(map[string][]api.Issue),
+		comments: make(map[string][]api.Comment),
 	}
 }
 
@@ -106,5 +109,31 @@ func (s *MemoryStore) ReplaceAllIssues(ctx context.Context, key string, issues [
 	stored := make([]api.Issue, len(issues))
 	copy(stored, issues)
 	s.issues[key] = stored
+	return nil
+}
+
+// ListComments returns cached comments for the given key, or false if not cached.
+func (s *MemoryStore) ListComments(ctx context.Context, key string) ([]api.Comment, bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	comments, ok := s.comments[key]
+	if !ok {
+		return nil, false, nil
+	}
+
+	out := make([]api.Comment, len(comments))
+	copy(out, comments)
+	return out, true, nil
+}
+
+// ReplaceAllComments atomically replaces all comments for a key.
+func (s *MemoryStore) ReplaceAllComments(ctx context.Context, key string, comments []api.Comment) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	stored := make([]api.Comment, len(comments))
+	copy(stored, comments)
+	s.comments[key] = stored
 	return nil
 }

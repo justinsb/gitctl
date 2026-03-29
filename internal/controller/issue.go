@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
@@ -14,15 +15,17 @@ import (
 type IssueController struct {
 	githubClient *github.Client
 	store        storage.IssueStore
+	commentStore storage.CommentStore
 	username     string
 	interval     time.Duration
 }
 
 // NewIssueController creates a new controller that syncs issues for the given username.
-func NewIssueController(client *github.Client, store storage.IssueStore, username string, interval time.Duration) *IssueController {
+func NewIssueController(client *github.Client, store storage.IssueStore, commentStore storage.CommentStore, username string, interval time.Duration) *IssueController {
 	return &IssueController{
 		githubClient: client,
 		store:        store,
+		commentStore: commentStore,
 		username:     username,
 		interval:     interval,
 	}
@@ -63,4 +66,20 @@ func (c *IssueController) sync(ctx context.Context) {
 	}
 
 	log.Printf("IssueController: synced %d assigned issues for %s", len(issues), c.username)
+
+	// Pre-fetch comments for each issue.
+	for _, issue := range issues {
+		if issue.Status.Repo == "" || issue.Status.Number == 0 {
+			continue
+		}
+		key := fmt.Sprintf("%s#%d", issue.Status.Repo, issue.Status.Number)
+		comments, err := c.githubClient.ListIssueComments(ctx, issue.Status.Repo, issue.Status.Number)
+		if err != nil {
+			log.Printf("IssueController: error fetching comments for %s: %v", key, err)
+			continue
+		}
+		if err := c.commentStore.ReplaceAllComments(ctx, key, comments); err != nil {
+			log.Printf("IssueController: error storing comments for %s: %v", key, err)
+		}
+	}
 }
