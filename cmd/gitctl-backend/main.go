@@ -12,10 +12,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/justinsb/gitctl/internal/api"
 	"github.com/justinsb/gitctl/internal/backend"
 	"github.com/justinsb/gitctl/internal/controller"
 	"github.com/justinsb/gitctl/internal/github"
-	"github.com/justinsb/gitctl/internal/storage/memorystorage"
+	"github.com/justinsb/gitctl/internal/storage"
 )
 
 var (
@@ -45,25 +46,29 @@ func main() {
 		log.Fatalf("Failed to chmod socket: %v", err)
 	}
 
-	// Set up storage and controllers.
-	store := memorystorage.New()
+	// Set up per-resource stores.
+	repoStore := storage.NewResourceStore[api.GitRepo]()
+	prStore := storage.NewResourceStore[api.PullRequest]()
+	issueStore := storage.NewResourceStore[api.Issue]()
+	commentStore := storage.NewResourceStore[api.Comment]()
+
 	githubClient := github.NewClient()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// Start the controllers to poll GitHub and populate storage.
-	repoCtrl := controller.NewGitRepoController(githubClient, store, *username, *syncInterval)
+	repoCtrl := controller.NewGitRepoController(githubClient, repoStore, *username, *syncInterval)
 	go repoCtrl.Run(ctx)
 
-	prCtrl := controller.NewPullRequestController(githubClient, store, store, *username, *syncInterval)
+	prCtrl := controller.NewPullRequestController(githubClient, prStore, commentStore, *username, *syncInterval)
 	go prCtrl.Run(ctx)
 
-	issueCtrl := controller.NewIssueController(githubClient, store, store, *username, *syncInterval)
+	issueCtrl := controller.NewIssueController(githubClient, issueStore, commentStore, *username, *syncInterval)
 	go issueCtrl.Run(ctx)
 
 	// Create the API handler that reads from storage.
-	handler := backend.NewServer(store, store, store, store, githubClient)
+	handler := backend.NewServer(repoStore, prStore, issueStore, commentStore, githubClient)
 
 	// Start Unix socket server.
 	unixServer := &http.Server{Handler: handler}

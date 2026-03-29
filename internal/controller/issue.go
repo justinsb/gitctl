@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/justinsb/gitctl/internal/api"
 	"github.com/justinsb/gitctl/internal/github"
 	"github.com/justinsb/gitctl/internal/storage"
 )
@@ -14,14 +15,14 @@ import (
 // and writes them to storage.
 type IssueController struct {
 	githubClient *github.Client
-	store        storage.IssueStore
-	commentStore storage.CommentStore
+	store        *storage.ResourceStore[api.Issue]
+	commentStore *storage.ResourceStore[api.Comment]
 	username     string
 	interval     time.Duration
 }
 
 // NewIssueController creates a new controller that syncs issues for the given username.
-func NewIssueController(client *github.Client, store storage.IssueStore, commentStore storage.CommentStore, username string, interval time.Duration) *IssueController {
+func NewIssueController(client *github.Client, store *storage.ResourceStore[api.Issue], commentStore *storage.ResourceStore[api.Comment], username string, interval time.Duration) *IssueController {
 	return &IssueController{
 		githubClient: client,
 		store:        store,
@@ -60,7 +61,7 @@ func (c *IssueController) sync(ctx context.Context) {
 		return
 	}
 
-	if err := c.store.ReplaceAllIssues(ctx, "assigned:"+c.username, issues); err != nil {
+	if err := c.store.ReplaceAll(ctx, "assigned:"+c.username, issues); err != nil {
 		log.Printf("IssueController: error storing assigned issues: %v", err)
 		return
 	}
@@ -78,7 +79,7 @@ func (c *IssueController) sync(ctx context.Context) {
 			log.Printf("IssueController: error fetching comments for %s: %v", key, err)
 			continue
 		}
-		if err := c.commentStore.ReplaceAllComments(ctx, key, comments); err != nil {
+		if err := c.commentStore.ReplaceAll(ctx, key, comments); err != nil {
 			log.Printf("IssueController: error storing comments for %s: %v", key, err)
 		}
 	}
