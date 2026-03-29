@@ -7,6 +7,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/justinsb/gitctl/internal/api"
 	"github.com/justinsb/gitctl/internal/github"
 	"github.com/justinsb/gitctl/internal/storage"
 )
@@ -15,13 +16,13 @@ import (
 // and writes them to storage.
 type GitRepoController struct {
 	githubClient *github.Client
-	store        storage.GitRepoStore
+	store        *storage.ResourceStore[api.GitRepo]
 	username     string
 	interval     time.Duration
 }
 
 // NewGitRepoController creates a new controller that syncs repos for the given username.
-func NewGitRepoController(client *github.Client, store storage.GitRepoStore, username string, interval time.Duration) *GitRepoController {
+func NewGitRepoController(client *github.Client, store *storage.ResourceStore[api.GitRepo], username string, interval time.Duration) *GitRepoController {
 	return &GitRepoController{
 		githubClient: client,
 		store:        store,

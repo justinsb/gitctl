@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/justinsb/gitctl/internal/api"
 	"github.com/justinsb/gitctl/internal/github"
 	"github.com/justinsb/gitctl/internal/storage"
 )
@@ -14,14 +15,14 @@ import (
 // and writes them to storage.
 type PullRequestController struct {
 	githubClient *github.Client
-	store        storage.PullRequestStore
-	commentStore storage.CommentStore
+	store        *storage.ResourceStore[api.PullRequest]
+	commentStore *storage.ResourceStore[api.Comment]
 	username     string
 	interval     time.Duration
 }
 
 // NewPullRequestController creates a new controller that syncs PRs for the given username.
-func NewPullRequestController(client *github.Client, store storage.PullRequestStore, commentStore storage.CommentStore, username string, interval time.Duration) *PullRequestController {
+func NewPullRequestController(client *github.Client, store *storage.ResourceStore[api.PullRequest], commentStore *storage.ResourceStore[api.Comment], username string, interval time.Duration) *PullRequestController {
 	return &PullRequestController{
 		githubClient: client,
 		store:        store,
@@ -59,7 +60,7 @@ func (c *PullRequestController) sync(ctx context.Context) {
 	if err != nil {
 		log.Printf("PullRequestController: error fetching outbound PRs: %v", err)
 	} else {
-		if err := c.store.ReplaceAllPullRequests(ctx, "outbound:"+c.username, outbound); err != nil {
+		if err := c.store.ReplaceAll(ctx, "outbound:"+c.username, outbound); err != nil {
 			log.Printf("PullRequestController: error storing outbound PRs: %v", err)
 		} else {
 			log.Printf("PullRequestController: synced %d outbound PRs for %s", len(outbound), c.username)
@@ -71,7 +72,7 @@ func (c *PullRequestController) sync(ctx context.Context) {
 	if err != nil {
 		log.Printf("PullRequestController: error fetching assigned PRs: %v", err)
 	} else {
-		if err := c.store.ReplaceAllPullRequests(ctx, "assigned:"+c.username, assigned); err != nil {
+		if err := c.store.ReplaceAll(ctx, "assigned:"+c.username, assigned); err != nil {
 			log.Printf("PullRequestController: error storing assigned PRs: %v", err)
 		} else {
 			log.Printf("PullRequestController: synced %d assigned PRs for %s", len(assigned), c.username)
@@ -95,7 +96,7 @@ func (c *PullRequestController) sync(ctx context.Context) {
 			log.Printf("PullRequestController: error fetching comments for %s: %v", key, err)
 			continue
 		}
-		if err := c.commentStore.ReplaceAllComments(ctx, key, comments); err != nil {
+		if err := c.commentStore.ReplaceAll(ctx, key, comments); err != nil {
 			log.Printf("PullRequestController: error storing comments for %s: %v", key, err)
 		}
 	}

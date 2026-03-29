@@ -17,16 +17,16 @@ import (
 
 // Server is the HTTP server exposing the gitctl Kubernetes-style API.
 type Server struct {
-	repoStore    storage.GitRepoStore
-	prStore      storage.PullRequestStore
-	issueStore   storage.IssueStore
-	commentStore storage.CommentStore
+	repoStore    *storage.ResourceStore[api.GitRepo]
+	prStore      *storage.ResourceStore[api.PullRequest]
+	issueStore   *storage.ResourceStore[api.Issue]
+	commentStore *storage.ResourceStore[api.Comment]
 	githubClient *github.Client
 	mux          *http.ServeMux
 }
 
 // NewServer creates a new HTTP Server and registers its routes.
-func NewServer(repoStore storage.GitRepoStore, prStore storage.PullRequestStore, issueStore storage.IssueStore, commentStore storage.CommentStore, githubClient *github.Client) *Server {
+func NewServer(repoStore *storage.ResourceStore[api.GitRepo], prStore *storage.ResourceStore[api.PullRequest], issueStore *storage.ResourceStore[api.Issue], commentStore *storage.ResourceStore[api.Comment], githubClient *github.Client) *Server {
 	s := &Server{
 		repoStore:    repoStore,
 		prStore:      prStore,
@@ -66,7 +66,7 @@ func (s *Server) handleListGitRepos(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Listing repositories for username: %s", username)
 
-	repos, err := s.repoStore.List(r.Context(), username)
+	repos, _, err := s.repoStore.List(r.Context(), username)
 	if err != nil {
 		log.Printf("Error listing repositories: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -110,7 +110,7 @@ func (s *Server) handleListPullRequests(w http.ResponseWriter, r *http.Request) 
 	key := scope + ":" + username
 	log.Printf("Listing pull requests for key: %s", key)
 
-	prs, err := s.prStore.ListPullRequests(r.Context(), key)
+	prs, _, err := s.prStore.List(r.Context(), key)
 	if err != nil {
 		log.Printf("Error listing pull requests: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -154,7 +154,7 @@ func (s *Server) handleListIssues(w http.ResponseWriter, r *http.Request) {
 	key := scope + ":" + username
 	log.Printf("Listing issues for key: %s", key)
 
-	issues, err := s.issueStore.ListIssues(r.Context(), key)
+	issues, _, err := s.issueStore.List(r.Context(), key)
 	if err != nil {
 		log.Printf("Error listing issues: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -206,7 +206,7 @@ func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Listing comments for %s", key)
 
 	// Check cache first.
-	comments, cached, err := s.commentStore.ListComments(r.Context(), key)
+	comments, cached, err := s.commentStore.List(r.Context(), key)
 	if err != nil {
 		log.Printf("Error reading comments from cache: %v", err)
 	}
@@ -220,7 +220,7 @@ func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if storeErr := s.commentStore.ReplaceAllComments(r.Context(), key, comments); storeErr != nil {
+		if storeErr := s.commentStore.ReplaceAll(r.Context(), key, comments); storeErr != nil {
 			log.Printf("Error caching comments: %v", storeErr)
 		}
 	} else {
@@ -233,7 +233,7 @@ func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
 				log.Printf("Error refreshing comments for %s: %v", key, err)
 				return
 			}
-			if storeErr := s.commentStore.ReplaceAllComments(ctx, key, fresh); storeErr != nil {
+			if storeErr := s.commentStore.ReplaceAll(ctx, key, fresh); storeErr != nil {
 				log.Printf("Error storing refreshed comments for %s: %v", key, storeErr)
 			}
 		}()
