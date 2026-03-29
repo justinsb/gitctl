@@ -19,6 +19,10 @@ const (
 	IssueKind = "Issue"
 	// IssueListKind is the Kind name for a list of Issue resources.
 	IssueListKind = "IssueList"
+	// CommentKind is the Kind name for a single Comment resource.
+	CommentKind = "Comment"
+	// CommentListKind is the Kind name for a list of Comment resources.
+	CommentListKind = "CommentList"
 	// APIVersion is the combined apiVersion field value.
 	APIVersion = Group + "/" + Version
 )
@@ -175,4 +179,38 @@ type IssueList struct {
 	Kind       string    `json:"kind,omitempty"`
 	Metadata   ListMeta  `json:"metadata,omitempty"`
 	Items      []Issue   `json:"items"`
+}
+
+// CommentSpec contains user-specified fields for a comment.
+type CommentSpec struct {
+	Body string `json:"body,omitempty"`
+}
+
+// CommentStatus contains GitHub-generated (observed) fields for a comment.
+type CommentStatus struct {
+	// Author is the GitHub username who wrote the comment.
+	Author string `json:"author,omitempty"`
+	// HTMLURL is the browser URL for the comment.
+	HTMLURL string `json:"htmlUrl,omitempty"`
+	// CreatedAt is the RFC 3339 timestamp when the comment was created.
+	CreatedAt string `json:"createdAt,omitempty"`
+	// UpdatedAt is the RFC 3339 timestamp of the last update.
+	UpdatedAt string `json:"updatedAt,omitempty"`
+}
+
+// Comment represents a GitHub issue or PR comment as a Kubernetes-style CRD resource.
+type Comment struct {
+	APIVersion string        `json:"apiVersion,omitempty"`
+	Kind       string        `json:"kind,omitempty"`
+	Metadata   ObjectMeta    `json:"metadata,omitempty"`
+	Spec       CommentSpec   `json:"spec,omitempty"`
+	Status     CommentStatus `json:"status,omitempty"`
+}
+
+// CommentList is a list of Comment resources.
+type CommentList struct {
+	APIVersion string    `json:"apiVersion,omitempty"`
+	Kind       string    `json:"kind,omitempty"`
+	Metadata   ListMeta  `json:"metadata,omitempty"`
+	Items      []Comment `json:"items"`
 }

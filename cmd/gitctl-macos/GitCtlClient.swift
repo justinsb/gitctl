@@ -58,6 +58,23 @@ class GitCtlClient {
         let issueList = try JSONDecoder().decode(IssueList.self, from: data)
         return issueList.items
     }
+    func listComments(repo: String, number: Int) async throws -> [Comment] {
+        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
+        components.path = "/apis/gitctl.justinsb.com/v1alpha1/comments"
+        components.queryItems = [
+            URLQueryItem(name: "repo", value: repo),
+            URLQueryItem(name: "number", value: String(number)),
+        ]
+
+        let (data, response) = try await URLSession.shared.data(from: components.url!)
+
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw GitCtlError.badResponse
+        }
+
+        let commentList = try JSONDecoder().decode(CommentList.self, from: data)
+        return commentList.items
+    }
 }
 
 enum GitCtlError: LocalizedError {

@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/justinsb/gitctl/internal/api"
@@ -24,6 +27,13 @@ var (
 	tabStyle          = lipgloss.NewStyle().Padding(0, 2)
 	activeTabStyle    = lipgloss.NewStyle().Padding(0, 2).Bold(true).Foreground(lipgloss.Color("170"))
 	tabBarStyle       = lipgloss.NewStyle().MarginLeft(2).MarginBottom(1)
+	detailBorderStyle = lipgloss.NewStyle().
+				BorderLeft(true).
+				BorderStyle(lipgloss.NormalBorder()).
+				BorderForeground(lipgloss.Color("240")).
+				PaddingLeft(1)
+	detailTitleStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("170"))
+	detailMetaStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 )
 
 // Tab represents a screen/tab in the TUI.
@@ -145,6 +155,40 @@ func (c *Client) ListIssues(ctx context.Context, username, scope string) ([]api.
 	}
 
 	return issueList.Items, nil
+}
+
+// ListComments calls GET /apis/.../comments.
+func (c *Client) ListComments(ctx context.Context, repo string, number int) ([]api.Comment, error) {
+	params := url.Values{}
+	params.Set("repo", repo)
+	params.Set("number", fmt.Sprintf("%d", number))
+	reqURL := fmt.Sprintf("%s/apis/%s/%s/comments?%s",
+		c.baseURL, api.Group, api.Version, params.Encode())
+	log.Printf("ListComments: repo=%q number=%d url=%s", repo, number, reqURL)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to contact backend: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("backend returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var commentList api.CommentList
+	if err := json.NewDecoder(resp.Body).Decode(&commentList); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return commentList.Items, nil
 }
 
 // --- Repo list item (existing) ---
@@ -310,6 +354,10 @@ type assignedIssuesLoadedMsg struct {
 	issues []api.Issue
 }
 
+type commentsLoadedMsg struct {
+	comments []api.Comment
+}
+
 type errMsg struct {
 	err error
 }
@@ -336,6 +384,18 @@ type Model struct {
 	// Repos tab
 	repoList    list.Model
 	repoLoading bool
+
+	// Detail pane
+	showDetail     bool
+	detailFocused  bool
+	detailViewport viewport.Model
+	detailTitle    string
+	detailContent  string
+	detailComments []api.Comment
+	detailLoading  bool
+	// Track what's selected for detail
+	selectedRepo   string
+	selectedNumber int
 
 	err error
 }
@@ -366,6 +426,8 @@ func NewModel(client *Client, username string) Model {
 	repoList.Styles.PaginationStyle = paginationStyle
 	repoList.Styles.HelpStyle = helpStyle
 
+	vp := viewport.New(0, 0)
+
 	return Model{
 		client:          client,
 		username:        username,
@@ -376,6 +438,7 @@ func NewModel(client *Client, username string) Model {
 		assignedLoading: true,
 		repoList:        repoList,
 		repoLoading:     true,
+		detailViewport:  vp,
 	}
 }
 
@@ -428,18 +491,22 @@ func loadRepos(client *Client, username string) tea.Cmd {
 	}
 }
 
+func loadComments(client *Client, repo string, number int) tea.Cmd {
+	return func() tea.Msg {
+		comments, err := client.ListComments(context.Background(), repo, number)
+		if err != nil {
+			return errMsg{err}
+		}
+		return commentsLoadedMsg{comments: comments}
+	}
+}
+
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		listHeight := msg.Height - 4 // account for tab bar
-		m.feedList.SetWidth(msg.Width)
-		m.feedList.SetHeight(listHeight)
-		m.assignedList.SetWidth(msg.Width)
-		m.assignedList.SetHeight(listHeight)
-		m.repoList.SetWidth(msg.Width)
-		m.repoList.SetHeight(listHeight)
+		m.resizePanes()
 		return m, nil
 
 	case feedLoadedMsg:
@@ -493,34 +560,264 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.repoList.SetItems(items)
 		return m, nil
 
+	case commentsLoadedMsg:
+		m.detailLoading = false
+		m.detailComments = msg.comments
+		m.updateDetailViewport()
+		return m, nil
+
 	case errMsg:
 		m.err = msg.err
 		return m, nil
 
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "q":
+		case "ctrl+c":
+			return m, tea.Quit
+		case "q":
+			if m.detailFocused {
+				m.detailFocused = false
+				return m, nil
+			}
+			if m.showDetail {
+				m.showDetail = false
+				m.detailFocused = false
+				m.resizePanes()
+				return m, nil
+			}
 			return m, tea.Quit
 		case "ctrl+]", "tab":
-			m.activeTab = (m.activeTab + 1) % Tab(len(tabNames))
+			if !m.showDetail {
+				m.activeTab = (m.activeTab + 1) % Tab(len(tabNames))
+			}
 			return m, nil
 		case "shift+tab":
-			m.activeTab = (m.activeTab - 1 + Tab(len(tabNames))) % Tab(len(tabNames))
+			if !m.showDetail {
+				m.activeTab = (m.activeTab - 1 + Tab(len(tabNames))) % Tab(len(tabNames))
+			}
 			return m, nil
+		case "enter":
+			if m.showDetail && !m.detailFocused {
+				// Focus the detail pane
+				m.detailFocused = true
+				return m, nil
+			}
+			if !m.showDetail {
+				return m.openDetail()
+			}
+			return m, nil
+		case "esc":
+			if m.detailFocused {
+				m.detailFocused = false
+				return m, nil
+			}
+			if m.showDetail {
+				m.showDetail = false
+				m.resizePanes()
+				return m, nil
+			}
 		}
 	}
 
-	// Update the active list
+	// Route messages to the focused pane
 	var cmd tea.Cmd
-	switch m.activeTab {
-	case TabFeed:
-		m.feedList, cmd = m.feedList.Update(msg)
-	case TabAssigned:
-		m.assignedList, cmd = m.assignedList.Update(msg)
-	case TabRepos:
-		m.repoList, cmd = m.repoList.Update(msg)
+	if m.showDetail && m.detailFocused {
+		m.detailViewport, cmd = m.detailViewport.Update(msg)
+	} else {
+		switch m.activeTab {
+		case TabFeed:
+			m.feedList, cmd = m.feedList.Update(msg)
+		case TabAssigned:
+			m.assignedList, cmd = m.assignedList.Update(msg)
+		case TabRepos:
+			m.repoList, cmd = m.repoList.Update(msg)
+		}
 	}
 	return m, cmd
+}
+
+func (m Model) openDetail() (tea.Model, tea.Cmd) {
+	var title, repo, author, state, body string
+	var number int
+	var labels []string
+
+	switch m.activeTab {
+	case TabFeed, TabAssigned:
+		var activeList list.Model
+		if m.activeTab == TabFeed {
+			activeList = m.feedList
+		} else {
+			activeList = m.assignedList
+		}
+		selected := activeList.SelectedItem()
+		if selected == nil {
+			return m, nil
+		}
+		switch item := selected.(type) {
+		case prItem:
+			title = item.pr.Spec.Title
+			repo = item.pr.Status.Repo
+			number = item.pr.Status.Number
+			author = item.pr.Status.Author
+			state = item.pr.Status.State
+			body = item.pr.Spec.Body
+			labels = item.pr.Status.Labels
+			if item.pr.Status.Draft {
+				state = "draft"
+			}
+			if item.pr.Status.Merged {
+				state = "merged"
+			}
+		case issueItem:
+			title = item.issue.Spec.Title
+			repo = item.issue.Status.Repo
+			number = item.issue.Status.Number
+			author = item.issue.Status.Author
+			state = item.issue.Status.State
+			body = item.issue.Spec.Body
+			labels = item.issue.Status.Labels
+		default:
+			return m, nil
+		}
+	case TabRepos:
+		// No detail view for repos yet
+		return m, nil
+	}
+
+	m.showDetail = true
+	m.detailFocused = true
+	m.detailLoading = true
+	m.detailComments = nil
+	m.detailTitle = title
+	m.selectedRepo = repo
+	m.selectedNumber = number
+
+	m.resizePanes()
+
+	detailWidth := m.width / 2
+	m.detailContent = buildDetailContent(title, repo, number, author, state, body, labels, nil, detailWidth)
+	m.detailViewport.SetContent(m.detailContent)
+	m.detailViewport.GotoTop()
+
+	return m, loadComments(m.client, repo, number)
+}
+
+func (m *Model) updateDetailViewport() {
+	// Rebuild content with stored item info + comments
+	var title, repo, author, state, body string
+	var number int
+	var labels []string
+
+	switch m.activeTab {
+	case TabFeed, TabAssigned:
+		var activeList list.Model
+		if m.activeTab == TabFeed {
+			activeList = m.feedList
+		} else {
+			activeList = m.assignedList
+		}
+		selected := activeList.SelectedItem()
+		if selected != nil {
+			switch item := selected.(type) {
+			case prItem:
+				title = item.pr.Spec.Title
+				repo = item.pr.Status.Repo
+				number = item.pr.Status.Number
+				author = item.pr.Status.Author
+				state = item.pr.Status.State
+				body = item.pr.Spec.Body
+				labels = item.pr.Status.Labels
+			case issueItem:
+				title = item.issue.Spec.Title
+				repo = item.issue.Status.Repo
+				number = item.issue.Status.Number
+				author = item.issue.Status.Author
+				state = item.issue.Status.State
+				body = item.issue.Spec.Body
+				labels = item.issue.Status.Labels
+			}
+		}
+	}
+
+	detailWidth := m.width / 2
+	content := buildDetailContent(title, repo, number, author, state, body, labels, m.detailComments, detailWidth)
+	m.detailViewport.SetContent(content)
+}
+
+func buildDetailContent(title, repo string, number int, author, state, body string, labels []string, comments []api.Comment, width int) string {
+	var b strings.Builder
+
+	// Header
+	b.WriteString(detailTitleStyle.Render(fmt.Sprintf("%s#%d", repo, number)))
+	b.WriteString("\n")
+	b.WriteString(detailTitleStyle.Render(title))
+	b.WriteString("\n\n")
+
+	// Meta
+	meta := fmt.Sprintf("Author: %s  State: %s", author, state)
+	if len(labels) > 0 {
+		meta += "  Labels: " + strings.Join(labels, ", ")
+	}
+	b.WriteString(detailMetaStyle.Render(meta))
+	b.WriteString("\n")
+	b.WriteString(strings.Repeat("─", minInt(width-2, 60)))
+	b.WriteString("\n\n")
+
+	// Body
+	if body != "" {
+		b.WriteString(body)
+	} else {
+		b.WriteString(detailMetaStyle.Render("(no description)"))
+	}
+	b.WriteString("\n")
+
+	// Comments
+	if len(comments) > 0 {
+		b.WriteString("\n")
+		b.WriteString(strings.Repeat("─", minInt(width-2, 60)))
+		b.WriteString("\n")
+		b.WriteString(fmt.Sprintf("\n%d comment(s)\n", len(comments)))
+		for _, c := range comments {
+			b.WriteString("\n")
+			b.WriteString(detailMetaStyle.Render(fmt.Sprintf("── %s  %s ──", c.Status.Author, formatTime(c.Status.CreatedAt))))
+			b.WriteString("\n")
+			b.WriteString(c.Spec.Body)
+			b.WriteString("\n")
+		}
+	}
+
+	return b.String()
+}
+
+// resizePanes updates the list and detail viewport dimensions based on current state.
+func (m *Model) resizePanes() {
+	listHeight := m.height - 4
+	listWidth := m.width
+	if m.showDetail {
+		listWidth = m.width / 2
+		m.detailViewport.Width = m.width - listWidth - 2
+		m.detailViewport.Height = listHeight
+	}
+	m.feedList.SetWidth(listWidth)
+	m.feedList.SetHeight(listHeight)
+	m.assignedList.SetWidth(listWidth)
+	m.assignedList.SetHeight(listHeight)
+	m.repoList.SetWidth(listWidth)
+	m.repoList.SetHeight(listHeight)
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func (m Model) View() string {
@@ -560,6 +857,55 @@ func (m Model) View() string {
 		} else {
 			content = m.repoList.View()
 		}
+	}
+
+	if m.showDetail {
+		// Split view: list on left, detail on right
+		listWidth := m.width / 2
+		detailWidth := m.width - listWidth
+
+		// Truncate list lines to listWidth
+		listLines := strings.Split(content, "\n")
+		detailStr := m.detailViewport.View()
+		if m.detailLoading {
+			detailStr = "Loading comments..."
+		}
+		borderStyle := detailBorderStyle
+		if m.detailFocused {
+			borderStyle = borderStyle.BorderForeground(lipgloss.Color("170"))
+		}
+		detailRendered := borderStyle.Width(detailWidth - 2).Render(detailStr)
+		detailLines := strings.Split(detailRendered, "\n")
+
+		// Join side by side
+		maxLines := len(listLines)
+		if len(detailLines) > maxLines {
+			maxLines = len(detailLines)
+		}
+
+		var combined strings.Builder
+		for i := 0; i < maxLines; i++ {
+			left := ""
+			if i < len(listLines) {
+				left = listLines[i]
+			}
+			// Pad left to listWidth
+			leftRunes := []rune(left)
+			if len(leftRunes) > listWidth {
+				leftRunes = leftRunes[:listWidth]
+			}
+			padded := string(leftRunes) + strings.Repeat(" ", maxInt(0, listWidth-len(leftRunes)))
+
+			right := ""
+			if i < len(detailLines) {
+				right = detailLines[i]
+			}
+			combined.WriteString(padded)
+			combined.WriteString(right)
+			combined.WriteString("\n")
+		}
+
+		return "\n" + tabBar + "\n" + combined.String()
 	}
 
 	return "\n" + tabBar + "\n" + content

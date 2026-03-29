@@ -16,12 +16,35 @@ enum SidebarItem: String, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - Selectable item for the detail column
+
+enum SelectableItem: Identifiable, Hashable {
+    case pullRequest(PullRequest)
+    case issue(Issue)
+
+    var id: String {
+        switch self {
+        case .pullRequest(let pr): return "pr-\(pr.id)"
+        case .issue(let issue): return "issue-\(issue.id)"
+        }
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+
+    static func == (lhs: SelectableItem, rhs: SelectableItem) -> Bool {
+        lhs.id == rhs.id
+    }
+}
+
 struct ContentView: View {
-    @State private var selection: SidebarItem? = .feed
+    @State private var sidebarSelection: SidebarItem? = .feed
+    @State private var selectedItem: SelectableItem?
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $selection) {
+            List(selection: $sidebarSelection) {
                 ForEach(SidebarItem.allCases) { item in
                     NavigationLink(value: item) {
                         Label(item.rawValue, systemImage: item.systemImage)
@@ -29,25 +52,39 @@ struct ContentView: View {
                 }
             }
             .navigationTitle("gitctl")
-        } detail: {
-            switch selection {
+            .onChange(of: sidebarSelection) {
+                selectedItem = nil
+            }
+        } content: {
+            switch sidebarSelection {
             case .feed:
-                FeedView()
+                FeedListView(selectedItem: $selectedItem)
             case .assigned:
-                AssignedView()
+                AssignedListView(selectedItem: $selectedItem)
             case .repos:
                 ReposView()
             case nil:
                 Text("Select a section")
                     .foregroundStyle(.secondary)
             }
+        } detail: {
+            switch selectedItem {
+            case .pullRequest(let pr):
+                PRDetailView(pr: pr)
+            case .issue(let issue):
+                IssueDetailView(issue: issue)
+            case nil:
+                Text("Select an item")
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }
 
-// MARK: - Feed View (Outbound PRs)
+// MARK: - Feed List View (Outbound PRs)
 
-struct FeedView: View {
+struct FeedListView: View {
+    @Binding var selectedItem: SelectableItem?
     @State private var prs: [PullRequest] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
@@ -73,8 +110,11 @@ struct FeedView: View {
             } else if let error = errorMessage {
                 ErrorView(message: error) { Task { await load() } }
             } else {
-                List(filteredPRs) { pr in
-                    PRRow(pr: pr)
+                List(selection: $selectedItem) {
+                    ForEach(filteredPRs) { pr in
+                        PRRow(pr: pr)
+                            .tag(SelectableItem.pullRequest(pr))
+                    }
                 }
             }
         }
@@ -104,9 +144,10 @@ struct FeedView: View {
     }
 }
 
-// MARK: - Assigned View (PRs + Issues assigned to me)
+// MARK: - Assigned List View (PRs + Issues assigned to me)
 
-struct AssignedView: View {
+struct AssignedListView: View {
+    @Binding var selectedItem: SelectableItem?
     @State private var prs: [PullRequest] = []
     @State private var issues: [Issue] = []
     @State private var isLoading = true
@@ -143,11 +184,12 @@ struct AssignedView: View {
             } else if let error = errorMessage {
                 ErrorView(message: error) { Task { await load() } }
             } else {
-                List {
+                List(selection: $selectedItem) {
                     if !filteredPRs.isEmpty {
                         Section("Pull Requests") {
                             ForEach(filteredPRs) { pr in
                                 PRRow(pr: pr)
+                                    .tag(SelectableItem.pullRequest(pr))
                             }
                         }
                     }
@@ -155,6 +197,7 @@ struct AssignedView: View {
                         Section("Issues") {
                             ForEach(filteredIssues) { issue in
                                 IssueRow(issue: issue)
+                                    .tag(SelectableItem.issue(issue))
                             }
                         }
                     }
@@ -250,6 +293,251 @@ struct ReposView: View {
             errorMessage = "Failed to load repos: \(error.localizedDescription)\n\nMake sure the backend is running:\n  go run cmd/gitctl-backend/main.go"
             isLoading = false
         }
+    }
+}
+
+// MARK: - Detail Views
+
+struct PRDetailView: View {
+    let pr: PullRequest
+    @State private var comments: [Comment] = []
+    @State private var isLoadingComments = true
+    @State private var commentError: String?
+
+    private let client = GitCtlClient()
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                // Header
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("\(pr.status?.repo ?? "")#\(pr.status?.number ?? 0)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(pr.spec?.title ?? "untitled")
+                        .font(.title2)
+                        .fontWeight(.bold)
+
+                    HStack(spacing: 12) {
+                        Label(pr.status?.author ?? "", systemImage: "person")
+                        Label(pr.status?.state ?? "", systemImage: "circle.fill")
+                            .foregroundStyle(pr.status?.state == "open" ? .green : .red)
+                        if pr.status?.draft == true {
+                            Text("Draft")
+                                .font(.caption)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(.quaternary)
+                                .clipShape(Capsule())
+                        }
+                        if pr.status?.merged == true {
+                            Text("Merged")
+                                .font(.caption)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(.purple.opacity(0.2))
+                                .clipShape(Capsule())
+                        }
+                        if let updated = pr.status?.updatedAt, updated.count >= 10 {
+                            Label(String(updated.prefix(10)), systemImage: "clock")
+                        }
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                    if let labels = pr.status?.labels, !labels.isEmpty {
+                        HStack(spacing: 4) {
+                            ForEach(labels, id: \.self) { label in
+                                Text(label)
+                                    .font(.caption2)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(.blue.opacity(0.15))
+                                    .clipShape(Capsule())
+                            }
+                        }
+                    }
+                }
+
+                Divider()
+
+                // Body
+                if let body = pr.spec?.body, !body.isEmpty {
+                    Text(body)
+                        .font(.body)
+                        .textSelection(.enabled)
+                } else {
+                    Text("No description provided.")
+                        .foregroundStyle(.secondary)
+                        .italic()
+                }
+
+                // Comments
+                Divider()
+
+                if isLoadingComments {
+                    ProgressView("Loading comments...")
+                } else if let error = commentError {
+                    Text(error)
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                } else if comments.isEmpty {
+                    Text("No comments")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("\(comments.count) comment(s)")
+                        .font(.headline)
+
+                    ForEach(comments) { comment in
+                        CommentView(comment: comment)
+                    }
+                }
+            }
+            .padding()
+        }
+        .navigationTitle("\(pr.status?.repo ?? "")#\(pr.status?.number ?? 0)")
+        .task { await loadComments() }
+    }
+
+    func loadComments() async {
+        guard let repo = pr.status?.repo, let number = pr.status?.number else {
+            isLoadingComments = false
+            return
+        }
+        do {
+            comments = try await client.listComments(repo: repo, number: number)
+            isLoadingComments = false
+        } catch {
+            commentError = "Failed to load comments: \(error.localizedDescription)"
+            isLoadingComments = false
+        }
+    }
+}
+
+struct IssueDetailView: View {
+    let issue: Issue
+    @State private var comments: [Comment] = []
+    @State private var isLoadingComments = true
+    @State private var commentError: String?
+
+    private let client = GitCtlClient()
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                // Header
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("\(issue.status?.repo ?? "")#\(issue.status?.number ?? 0)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(issue.spec?.title ?? "untitled")
+                        .font(.title2)
+                        .fontWeight(.bold)
+
+                    HStack(spacing: 12) {
+                        Label(issue.status?.author ?? "", systemImage: "person")
+                        Label(issue.status?.state ?? "", systemImage: "circle.fill")
+                            .foregroundStyle(issue.status?.state == "open" ? .green : .red)
+                        if let updated = issue.status?.updatedAt, updated.count >= 10 {
+                            Label(String(updated.prefix(10)), systemImage: "clock")
+                        }
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                    if let labels = issue.status?.labels, !labels.isEmpty {
+                        HStack(spacing: 4) {
+                            ForEach(labels, id: \.self) { label in
+                                Text(label)
+                                    .font(.caption2)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(.blue.opacity(0.15))
+                                    .clipShape(Capsule())
+                            }
+                        }
+                    }
+                }
+
+                Divider()
+
+                // Body
+                if let body = issue.spec?.body, !body.isEmpty {
+                    Text(body)
+                        .font(.body)
+                        .textSelection(.enabled)
+                } else {
+                    Text("No description provided.")
+                        .foregroundStyle(.secondary)
+                        .italic()
+                }
+
+                // Comments
+                Divider()
+
+                if isLoadingComments {
+                    ProgressView("Loading comments...")
+                } else if let error = commentError {
+                    Text(error)
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                } else if comments.isEmpty {
+                    Text("No comments")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("\(comments.count) comment(s)")
+                        .font(.headline)
+
+                    ForEach(comments) { comment in
+                        CommentView(comment: comment)
+                    }
+                }
+            }
+            .padding()
+        }
+        .navigationTitle("\(issue.status?.repo ?? "")#\(issue.status?.number ?? 0)")
+        .task { await loadComments() }
+    }
+
+    func loadComments() async {
+        guard let repo = issue.status?.repo, let number = issue.status?.number else {
+            isLoadingComments = false
+            return
+        }
+        do {
+            comments = try await client.listComments(repo: repo, number: number)
+            isLoadingComments = false
+        } catch {
+            commentError = "Failed to load comments: \(error.localizedDescription)"
+            isLoadingComments = false
+        }
+    }
+}
+
+struct CommentView: View {
+    let comment: Comment
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label(comment.status?.author ?? "unknown", systemImage: "person.circle")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                Spacer()
+                if let created = comment.status?.createdAt, created.count >= 10 {
+                    Text(String(created.prefix(10)))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Text(comment.spec?.body ?? "")
+                .font(.body)
+                .textSelection(.enabled)
+        }
+        .padding()
+        .background(.quaternary.opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 

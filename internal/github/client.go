@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/justinsb/gitctl/internal/api"
@@ -122,19 +123,19 @@ type githubSearchResult struct {
 
 // githubSearchItem represents an item from the GitHub Search API (/search/issues).
 type githubSearchItem struct {
-	Number      int              `json:"number"`
-	Title       string           `json:"title"`
-	Body        string           `json:"body"`
-	State       string           `json:"state"`
-	HTMLURL     string           `json:"html_url"`
-	CreatedAt   string           `json:"created_at"`
-	UpdatedAt   string           `json:"updated_at"`
-	Draft       bool             `json:"draft"`
-	User        githubUser       `json:"user"`
-	Assignees   []githubUser     `json:"assignees"`
-	Labels      []githubLabel    `json:"labels"`
-	PullRequest *githubPRRef     `json:"pull_request"`
-	Repository  githubRepository `json:"repository"`
+	Number        int           `json:"number"`
+	Title         string        `json:"title"`
+	Body          string        `json:"body"`
+	State         string        `json:"state"`
+	HTMLURL       string        `json:"html_url"`
+	RepositoryURL string        `json:"repository_url"`
+	CreatedAt     string        `json:"created_at"`
+	UpdatedAt     string        `json:"updated_at"`
+	Draft         bool          `json:"draft"`
+	User          githubUser    `json:"user"`
+	Assignees     []githubUser  `json:"assignees"`
+	Labels        []githubLabel `json:"labels"`
+	PullRequest   *githubPRRef  `json:"pull_request"`
 }
 
 type githubUser struct {
@@ -149,8 +150,15 @@ type githubPRRef struct {
 	MergedAt string `json:"merged_at"`
 }
 
-type githubRepository struct {
-	FullName string `json:"full_name"`
+// repoFullName extracts "owner/repo" from a repository_url like
+// "https://api.github.com/repos/owner/repo".
+func repoFullName(repositoryURL string) string {
+	const prefix = "/repos/"
+	i := strings.LastIndex(repositoryURL, prefix)
+	if i == -1 {
+		return ""
+	}
+	return repositoryURL[i+len(prefix):]
 }
 
 // searchIssues performs a GitHub search and returns the raw items.
@@ -230,14 +238,14 @@ func convertToPullRequests(items []githubSearchItem) []api.PullRequest {
 			APIVersion: api.APIVersion,
 			Kind:       api.PullRequestKind,
 			Metadata: api.ObjectMeta{
-				Name: fmt.Sprintf("%s#%d", item.Repository.FullName, item.Number),
+				Name: fmt.Sprintf("%s#%d", repoFullName(item.RepositoryURL), item.Number),
 			},
 			Spec: api.PullRequestSpec{
 				Title: item.Title,
 				Body:  item.Body,
 			},
 			Status: api.PullRequestStatus{
-				Repo:      item.Repository.FullName,
+				Repo:      repoFullName(item.RepositoryURL),
 				Number:    item.Number,
 				State:     item.State,
 				Author:    item.User.Login,
@@ -269,14 +277,14 @@ func convertToIssues(items []githubSearchItem) []api.Issue {
 			APIVersion: api.APIVersion,
 			Kind:       api.IssueKind,
 			Metadata: api.ObjectMeta{
-				Name: fmt.Sprintf("%s#%d", item.Repository.FullName, item.Number),
+				Name: fmt.Sprintf("%s#%d", repoFullName(item.RepositoryURL), item.Number),
 			},
 			Spec: api.IssueSpec{
 				Title: item.Title,
 				Body:  item.Body,
 			},
 			Status: api.IssueStatus{
-				Repo:      item.Repository.FullName,
+				Repo:      repoFullName(item.RepositoryURL),
 				Number:    item.Number,
 				State:     item.State,
 				Author:    item.User.Login,
@@ -289,4 +297,64 @@ func convertToIssues(items []githubSearchItem) []api.Issue {
 		}
 	}
 	return issues
+}
+
+type githubComment struct {
+	ID        int        `json:"id"`
+	Body      string     `json:"body"`
+	HTMLURL   string     `json:"html_url"`
+	CreatedAt string     `json:"created_at"`
+	UpdatedAt string     `json:"updated_at"`
+	User      githubUser `json:"user"`
+}
+
+// ListIssueComments fetches comments for an issue or pull request.
+// The GitHub API uses the same endpoint for both issue and PR comments.
+func (c *Client) ListIssueComments(ctx context.Context, repo string, number int) ([]api.Comment, error) {
+	u := fmt.Sprintf("%s/repos/%s/issues/%d/comments?per_page=100", c.baseURL, repo, number)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	c.setAuthHeader(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch comments: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	var ghComments []githubComment
+	if err := json.NewDecoder(resp.Body).Decode(&ghComments); err != nil {
+		return nil, fmt.Errorf("failed to decode comments response: %w", err)
+	}
+
+	comments := make([]api.Comment, len(ghComments))
+	for i, gc := range ghComments {
+		comments[i] = api.Comment{
+			APIVersion: api.APIVersion,
+			Kind:       api.CommentKind,
+			Metadata: api.ObjectMeta{
+				Name: fmt.Sprintf("%s#%d-comment-%d", repo, number, gc.ID),
+			},
+			Spec: api.CommentSpec{
+				Body: gc.Body,
+			},
+			Status: api.CommentStatus{
+				Author:    gc.User.Login,
+				HTMLURL:   gc.HTMLURL,
+				CreatedAt: gc.CreatedAt,
+				UpdatedAt: gc.UpdatedAt,
+			},
+		}
+	}
+
+	return comments, nil
 }

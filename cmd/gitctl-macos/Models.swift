@@ -2,7 +2,7 @@ import Foundation
 
 // Kubernetes-style API types matching the Go backend's JSON wire format.
 
-struct ObjectMeta: Codable {
+struct ObjectMeta: Codable, Hashable {
     var name: String?
     var namespace: String?
 }
@@ -46,12 +46,12 @@ struct GitRepoList: Codable {
 
 // MARK: - PullRequest
 
-struct PullRequestSpec: Codable {
+struct PullRequestSpec: Codable, Hashable {
     var title: String?
     var body: String?
 }
 
-struct PullRequestStatus: Codable {
+struct PullRequestStatus: Codable, Hashable {
     var repo: String?
     var number: Int?
     var state: String?
@@ -65,7 +65,7 @@ struct PullRequestStatus: Codable {
     var updatedAt: String?
 }
 
-struct PullRequest: Codable, Identifiable {
+struct PullRequest: Codable, Identifiable, Hashable {
     var apiVersion: String?
     var kind: String?
     var metadata: ObjectMeta?
@@ -84,12 +84,12 @@ struct PullRequestList: Codable {
 
 // MARK: - Issue
 
-struct IssueSpec: Codable {
+struct IssueSpec: Codable, Hashable {
     var title: String?
     var body: String?
 }
 
-struct IssueStatus: Codable {
+struct IssueStatus: Codable, Hashable {
     var repo: String?
     var number: Int?
     var state: String?
@@ -101,7 +101,7 @@ struct IssueStatus: Codable {
     var updatedAt: String?
 }
 
-struct Issue: Codable, Identifiable {
+struct Issue: Codable, Identifiable, Hashable {
     var apiVersion: String?
     var kind: String?
     var metadata: ObjectMeta?
@@ -116,4 +116,34 @@ struct IssueList: Codable {
     var kind: String?
     var metadata: ListMeta?
     var items: [Issue]
+}
+
+// MARK: - Comment
+
+struct CommentSpec: Codable {
+    var body: String?
+}
+
+struct CommentStatus: Codable {
+    var author: String?
+    var htmlUrl: String?
+    var createdAt: String?
+    var updatedAt: String?
+}
+
+struct Comment: Codable, Identifiable {
+    var apiVersion: String?
+    var kind: String?
+    var metadata: ObjectMeta?
+    var spec: CommentSpec?
+    var status: CommentStatus?
+
+    var id: String { metadata?.name ?? UUID().uuidString }
+}
+
+struct CommentList: Codable {
+    var apiVersion: String?
+    var kind: String?
+    var metadata: ListMeta?
+    var items: [Comment]
 }

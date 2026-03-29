@@ -1,3 +1,4 @@
 bin/
 .build/
 /gitctl-backend
+.DS_Store

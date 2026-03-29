@@ -4,33 +4,38 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/justinsb/gitctl/internal/api"
+	"github.com/justinsb/gitctl/internal/github"
 	"github.com/justinsb/gitctl/internal/storage"
 )
 
 // Server is the HTTP server exposing the gitctl Kubernetes-style API.
 type Server struct {
-	repoStore storage.GitRepoStore
-	prStore   storage.PullRequestStore
-	issueStore storage.IssueStore
-	mux       *http.ServeMux
+	repoStore    storage.GitRepoStore
+	prStore      storage.PullRequestStore
+	issueStore   storage.IssueStore
+	githubClient *github.Client
+	mux          *http.ServeMux
 }
 
 // NewServer creates a new HTTP Server and registers its routes.
-func NewServer(repoStore storage.GitRepoStore, prStore storage.PullRequestStore, issueStore storage.IssueStore) *Server {
+func NewServer(repoStore storage.GitRepoStore, prStore storage.PullRequestStore, issueStore storage.IssueStore, githubClient *github.Client) *Server {
 	s := &Server{
-		repoStore:  repoStore,
-		prStore:    prStore,
-		issueStore: issueStore,
-		mux:        http.NewServeMux(),
+		repoStore:    repoStore,
+		prStore:      prStore,
+		issueStore:   issueStore,
+		githubClient: githubClient,
+		mux:          http.NewServeMux(),
 	}
 
 	base := "/apis/" + api.Group + "/" + api.Version
 	s.mux.HandleFunc(base+"/gitrepos", s.handleListGitRepos)
 	s.mux.HandleFunc(base+"/pullrequests", s.handleListPullRequests)
 	s.mux.HandleFunc(base+"/issues", s.handleListIssues)
+	s.mux.HandleFunc(base+"/comments", s.handleListComments)
 
 	return s
 }
@@ -157,6 +162,59 @@ func (s *Server) handleListIssues(w http.ResponseWriter, r *http.Request) {
 		APIVersion: api.APIVersion,
 		Kind:       api.IssueListKind,
 		Items:      issues,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(list); err != nil {
+		log.Printf("Error encoding response: %v", err)
+	}
+}
+
+// handleListComments handles GET /apis/gitctl.justinsb.com/v1alpha1/comments.
+// Query parameters: repo (required, e.g. "owner/repo"), number (required, issue/PR number).
+// Comments are fetched directly from GitHub rather than from storage.
+func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
+	log.Printf("handleListComments: method=%s path=%s rawQuery=%s", r.Method, r.URL.Path, r.URL.RawQuery)
+
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	repo := strings.TrimSpace(r.URL.Query().Get("repo"))
+	log.Printf("handleListComments: parsed repo=%q", repo)
+	if repo == "" {
+		http.Error(w, "repo query parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	numberStr := strings.TrimSpace(r.URL.Query().Get("number"))
+	if numberStr == "" {
+		http.Error(w, "number query parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	number, err := strconv.Atoi(numberStr)
+	if err != nil {
+		http.Error(w, "number must be an integer", http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("Listing comments for %s#%d", repo, number)
+
+	comments, err := s.githubClient.ListIssueComments(r.Context(), repo, number)
+	if err != nil {
+		log.Printf("Error listing comments: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Found %d comments for %s#%d", len(comments), repo, number)
+
+	list := api.CommentList{
+		APIVersion: api.APIVersion,
+		Kind:       api.CommentListKind,
+		Items:      comments,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

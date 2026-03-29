@@ -63,7 +63,7 @@ func main() {
 	go issueCtrl.Run(ctx)
 
 	// Create the API handler that reads from storage.
-	handler := backend.NewServer(store, store, store)
+	handler := backend.NewServer(store, store, store, githubClient)
 
 	// Start Unix socket server.
 	unixServer := &http.Server{Handler: handler}
