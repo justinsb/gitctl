@@ -1,4 +1,4 @@
-aaccacdd.PHONY: build clean run-backend run-frontend run-macos test
+.PHONY: build clean run-backend run-frontend run-macos test
 
 # Default target
 all: build
