@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"mime"
+
 	"github.com/justinsb/gitctl/internal/api"
 	"github.com/justinsb/gitctl/internal/github"
 	"github.com/justinsb/gitctl/internal/storage"
@@ -125,6 +127,10 @@ func (s *Server) handleListPullRequests(w http.ResponseWriter, r *http.Request) 
 		Items:      prs,
 	}
 
+	if wantsHTML(r) {
+		renderPRBodies(list.Items)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(list); err != nil {
 		log.Printf("Error encoding response: %v", err)
@@ -167,6 +173,10 @@ func (s *Server) handleListIssues(w http.ResponseWriter, r *http.Request) {
 		APIVersion: api.APIVersion,
 		Kind:       api.IssueListKind,
 		Items:      issues,
+	}
+
+	if wantsHTML(r) {
+		renderIssueBodies(list.Items)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -247,8 +257,51 @@ func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
 		Items:      comments,
 	}
 
+	if wantsHTML(r) {
+		renderCommentBodies(list.Items)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(list); err != nil {
 		log.Printf("Error encoding response: %v", err)
+	}
+}
+
+// wantsHTML checks whether the client prefers HTML-rendered markdown bodies.
+// Clients signal this by including "text/html" in the Accept header.
+func wantsHTML(r *http.Request) bool {
+	for _, a := range strings.Split(r.Header.Get("Accept"), ",") {
+		mt, _, err := mime.ParseMediaType(strings.TrimSpace(a))
+		if err == nil && mt == "text/html" {
+			return true
+		}
+	}
+	return false
+}
+
+// renderPRBodies converts markdown Body fields to HTML in-place.
+func renderPRBodies(prs []api.PullRequest) {
+	for i := range prs {
+		if prs[i].Spec.Body != "" {
+			prs[i].Spec.Body = renderMarkdown(prs[i].Spec.Body)
+		}
+	}
+}
+
+// renderIssueBodies converts markdown Body fields to HTML in-place.
+func renderIssueBodies(issues []api.Issue) {
+	for i := range issues {
+		if issues[i].Spec.Body != "" {
+			issues[i].Spec.Body = renderMarkdown(issues[i].Spec.Body)
+		}
+	}
+}
+
+// renderCommentBodies converts markdown Body fields to HTML in-place.
+func renderCommentBodies(comments []api.Comment) {
+	for i := range comments {
+		if comments[i].Spec.Body != "" {
+			comments[i].Spec.Body = renderMarkdown(comments[i].Spec.Body)
+		}
 	}
 }

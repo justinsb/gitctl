@@ -308,244 +308,59 @@ struct ReposView: View {
 
 struct PRDetailView: View {
     let pr: PullRequest
-    @State private var comments: [Comment] = []
-    @State private var isLoadingComments = true
+    @State private var comments: [Comment]?
     @State private var commentError: String?
 
     private let client = GitCtlClient()
 
+    private var pageHTML: String {
+        DetailPageBuilder.buildPRPage(pr: pr, comments: comments, commentError: commentError)
+    }
+
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 16) {
-                // Header
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("\(pr.status?.repo ?? "")#\(pr.status?.number ?? 0)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(pr.spec?.title ?? "untitled")
-                        .font(.title2)
-                        .fontWeight(.bold)
-
-                    HStack(spacing: 12) {
-                        Label(pr.status?.author ?? "", systemImage: "person")
-                        Label(pr.status?.state ?? "", systemImage: "circle.fill")
-                            .foregroundStyle(pr.status?.state == "open" ? .green : .red)
-                        if pr.status?.draft == true {
-                            Text("Draft")
-                                .font(.caption)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(.quaternary)
-                                .clipShape(Capsule())
-                        }
-                        if pr.status?.merged == true {
-                            Text("Merged")
-                                .font(.caption)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(.purple.opacity(0.2))
-                                .clipShape(Capsule())
-                        }
-                        if let updated = pr.status?.updatedAt, updated.count >= 10 {
-                            Label(String(updated.prefix(10)), systemImage: "clock")
-                        }
-                    }
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                    if let labels = pr.status?.labels, !labels.isEmpty {
-                        HStack(spacing: 4) {
-                            ForEach(labels, id: \.self) { label in
-                                Text(label)
-                                    .font(.caption2)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(.blue.opacity(0.15))
-                                    .clipShape(Capsule())
-                            }
-                        }
-                    }
-                }
-
-                Divider()
-
-                // Body
-                if let body = pr.spec?.body, !body.isEmpty {
-                    Text(body)
-                        .font(.body)
-                        .textSelection(.enabled)
-                } else {
-                    Text("No description provided.")
-                        .foregroundStyle(.secondary)
-                        .italic()
-                }
-
-                // Comments
-                Divider()
-
-                if isLoadingComments {
-                    ProgressView("Loading comments...")
-                } else if let error = commentError {
-                    Text(error)
-                        .foregroundStyle(.red)
-                        .font(.caption)
-                } else if comments.isEmpty {
-                    Text("No comments")
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("\(comments.count) comment(s)")
-                        .font(.headline)
-
-                    ForEach(comments) { comment in
-                        CommentView(comment: comment)
-                    }
-                }
-            }
-            .padding()
-        }
-        .navigationTitle("\(pr.status?.repo ?? "")#\(pr.status?.number ?? 0)")
-        .task { await loadComments() }
+        DetailWebView(html: pageHTML)
+            .navigationTitle("\(pr.status?.repo ?? "")#\(pr.status?.number ?? 0)")
+            .task { await loadComments() }
     }
 
     func loadComments() async {
         guard let repo = pr.status?.repo, let number = pr.status?.number else {
-            isLoadingComments = false
             return
         }
         do {
             comments = try await client.listComments(repo: repo, number: number)
-            isLoadingComments = false
         } catch {
             commentError = "Failed to load comments: \(error.localizedDescription)"
-            isLoadingComments = false
         }
     }
 }
 
 struct IssueDetailView: View {
     let issue: Issue
-    @State private var comments: [Comment] = []
-    @State private var isLoadingComments = true
+    @State private var comments: [Comment]?
     @State private var commentError: String?
 
     private let client = GitCtlClient()
 
+    private var pageHTML: String {
+        DetailPageBuilder.buildIssuePage(issue: issue, comments: comments, commentError: commentError)
+    }
+
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 16) {
-                // Header
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("\(issue.status?.repo ?? "")#\(issue.status?.number ?? 0)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(issue.spec?.title ?? "untitled")
-                        .font(.title2)
-                        .fontWeight(.bold)
-
-                    HStack(spacing: 12) {
-                        Label(issue.status?.author ?? "", systemImage: "person")
-                        Label(issue.status?.state ?? "", systemImage: "circle.fill")
-                            .foregroundStyle(issue.status?.state == "open" ? .green : .red)
-                        if let updated = issue.status?.updatedAt, updated.count >= 10 {
-                            Label(String(updated.prefix(10)), systemImage: "clock")
-                        }
-                    }
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                    if let labels = issue.status?.labels, !labels.isEmpty {
-                        HStack(spacing: 4) {
-                            ForEach(labels, id: \.self) { label in
-                                Text(label)
-                                    .font(.caption2)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(.blue.opacity(0.15))
-                                    .clipShape(Capsule())
-                            }
-                        }
-                    }
-                }
-
-                Divider()
-
-                // Body
-                if let body = issue.spec?.body, !body.isEmpty {
-                    Text(body)
-                        .font(.body)
-                        .textSelection(.enabled)
-                } else {
-                    Text("No description provided.")
-                        .foregroundStyle(.secondary)
-                        .italic()
-                }
-
-                // Comments
-                Divider()
-
-                if isLoadingComments {
-                    ProgressView("Loading comments...")
-                } else if let error = commentError {
-                    Text(error)
-                        .foregroundStyle(.red)
-                        .font(.caption)
-                } else if comments.isEmpty {
-                    Text("No comments")
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("\(comments.count) comment(s)")
-                        .font(.headline)
-
-                    ForEach(comments) { comment in
-                        CommentView(comment: comment)
-                    }
-                }
-            }
-            .padding()
-        }
-        .navigationTitle("\(issue.status?.repo ?? "")#\(issue.status?.number ?? 0)")
-        .task { await loadComments() }
+        DetailWebView(html: pageHTML)
+            .navigationTitle("\(issue.status?.repo ?? "")#\(issue.status?.number ?? 0)")
+            .task { await loadComments() }
     }
 
     func loadComments() async {
         guard let repo = issue.status?.repo, let number = issue.status?.number else {
-            isLoadingComments = false
             return
         }
         do {
             comments = try await client.listComments(repo: repo, number: number)
-            isLoadingComments = false
         } catch {
             commentError = "Failed to load comments: \(error.localizedDescription)"
-            isLoadingComments = false
         }
-    }
-}
-
-struct CommentView: View {
-    let comment: Comment
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Label(comment.status?.author ?? "unknown", systemImage: "person.circle")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                Spacer()
-                if let created = comment.status?.createdAt, created.count >= 10 {
-                    Text(String(created.prefix(10)))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Text(comment.spec?.body ?? "")
-                .font(.body)
-                .textSelection(.enabled)
-        }
-        .padding()
-        .background(.quaternary.opacity(0.5))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 

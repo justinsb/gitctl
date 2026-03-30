@@ -8,6 +8,14 @@ class GitCtlClient {
         self.baseURL = baseURL
     }
 
+    /// Creates a URLRequest with the Accept: text/html header so the backend
+    /// returns markdown body fields pre-rendered as HTML.
+    private func htmlRequest(url: URL) -> URLRequest {
+        var request = URLRequest(url: url)
+        request.setValue("text/html", forHTTPHeaderField: "Accept")
+        return request
+    }
+
     func listRepos(username: String) async throws -> [GitRepo] {
         var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
         components.path = "/apis/gitctl.justinsb.com/v1alpha1/gitrepos"
@@ -31,7 +39,7 @@ class GitCtlClient {
             URLQueryItem(name: "scope", value: scope),
         ]
 
-        let (data, response) = try await URLSession.shared.data(from: components.url!)
+        let (data, response) = try await URLSession.shared.data(for: htmlRequest(url: components.url!))
 
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw GitCtlError.badResponse
@@ -49,7 +57,7 @@ class GitCtlClient {
             URLQueryItem(name: "scope", value: scope),
         ]
 
-        let (data, response) = try await URLSession.shared.data(from: components.url!)
+        let (data, response) = try await URLSession.shared.data(for: htmlRequest(url: components.url!))
 
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw GitCtlError.badResponse
@@ -58,6 +66,7 @@ class GitCtlClient {
         let issueList = try JSONDecoder().decode(IssueList.self, from: data)
         return issueList.items
     }
+
     func listComments(repo: String, number: Int) async throws -> [Comment] {
         var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
         components.path = "/apis/gitctl.justinsb.com/v1alpha1/comments"
@@ -66,7 +75,7 @@ class GitCtlClient {
             URLQueryItem(name: "number", value: String(number)),
         ]
 
-        let (data, response) = try await URLSession.shared.data(from: components.url!)
+        let (data, response) = try await URLSession.shared.data(for: htmlRequest(url: components.url!))
 
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw GitCtlError.badResponse
