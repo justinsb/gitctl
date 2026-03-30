@@ -5,6 +5,8 @@ import WebKit
 
 /// A single WKWebView that renders the entire detail page (header, body, comments) as HTML.
 /// Handles its own scrolling — no parent ScrollView needed.
+
+#if os(macOS)
 struct DetailWebView: NSViewRepresentable {
     let html: String
 
@@ -40,6 +42,43 @@ struct DetailWebView: NSViewRepresentable {
         }
     }
 }
+#else
+struct DetailWebView: UIViewRepresentable {
+    let html: String
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeUIView(context: Context) -> WKWebView {
+        let webView = WKWebView(frame: .zero)
+        webView.navigationDelegate = context.coordinator
+        webView.loadHTMLString(html, baseURL: nil)
+        context.coordinator.currentHTML = html
+        return webView
+    }
+
+    func updateUIView(_ webView: WKWebView, context: Context) {
+        if context.coordinator.currentHTML != html {
+            context.coordinator.currentHTML = html
+            webView.loadHTMLString(html, baseURL: nil)
+        }
+    }
+
+    class Coordinator: NSObject, WKNavigationDelegate {
+        var currentHTML: String = ""
+
+        func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+            if navigationAction.navigationType == .linkActivated, let url = navigationAction.request.url {
+                UIApplication.shared.open(url)
+                decisionHandler(.cancel)
+            } else {
+                decisionHandler(.allow)
+            }
+        }
+    }
+}
+#endif
 
 // MARK: - HTML Page Builder
 

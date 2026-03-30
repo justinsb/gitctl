@@ -1,4 +1,4 @@
-.PHONY: build clean run-backend run-frontend run-macos test
+.PHONY: build clean run-backend run-frontend run-macos build-ipad run-ipad test
 
 # Default target
 all: build
@@ -14,7 +14,7 @@ build:
 # Clean build artifacts
 clean:
 	@echo "Cleaning..."
-	@rm -rf bin/
+	@rm -rf bin/ $(IPAD_DERIVED_DATA)
 	@rm -f /tmp/gitctl.sock
 	@echo "Clean complete"
 
@@ -40,6 +40,31 @@ build-macos:
 # Build and run macOS native app
 run-macos: build-macos
 	@open bin/GitCtl.app
+
+IPAD_SIMULATOR ?= iPad Pro 11-inch (M4)
+IPAD_DERIVED_DATA = bin/DerivedData-ipad
+
+# Build iPad app for simulator
+build-ipad:
+	@echo "Building iPad app for simulator..."
+	@cd cmd/gitctl-macos && xcodebuild -scheme GitCtl \
+		-destination 'platform=iOS Simulator,name=$(IPAD_SIMULATOR)' \
+		-derivedDataPath ../../$(IPAD_DERIVED_DATA) \
+		build 2>&1 | tail -1
+	@mkdir -p bin/GitCtl-iPad.app
+	@cp $(IPAD_DERIVED_DATA)/Build/Products/Debug-iphonesimulator/GitCtl bin/GitCtl-iPad.app/
+	@cp cmd/gitctl-macos/Info-iOS.plist bin/GitCtl-iPad.app/Info.plist
+	@echo "Built bin/GitCtl-iPad.app"
+
+# Build and run iPad app in simulator
+run-ipad: build-ipad
+	@echo "Booting simulator..."
+	@xcrun simctl boot '$(IPAD_SIMULATOR)' 2>/dev/null || true
+	@open -a Simulator
+	@echo "Installing app..."
+	@xcrun simctl install '$(IPAD_SIMULATOR)' bin/GitCtl-iPad.app
+	@echo "Launching app..."
+	@xcrun simctl launch '$(IPAD_SIMULATOR)' com.justinsb.gitctl
 
 # Run tests
 test:

@@ -3,12 +3,12 @@ import PackageDescription
 
 let package = Package(
     name: "GitCtl",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v14), .iOS(.v17)],
     targets: [
         .executableTarget(
             name: "GitCtl",
             path: ".",
-            exclude: ["Package.swift", "Info.plist"],
+            exclude: ["Package.swift", "Info.plist", "Info-iOS.plist"],
             swiftSettings: [
                 .unsafeFlags(["-parse-as-library"]),
             ]
