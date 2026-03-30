@@ -43,39 +43,47 @@ struct ContentView: View {
     @State private var selectedItem: SelectableItem?
 
     var body: some View {
-        NavigationSplitView {
-            List(selection: $sidebarSelection) {
-                ForEach(SidebarItem.allCases) { item in
-                    NavigationLink(value: item) {
-                        Label(item.rawValue, systemImage: item.systemImage)
-                    }
+        if let selected = selectedItem {
+            // Full-screen detail view
+            Group {
+                switch selected {
+                case .pullRequest(let pr):
+                    PRDetailView(pr: pr)
+                case .issue(let issue):
+                    IssueDetailView(issue: issue)
                 }
             }
-            .navigationTitle("gitctl")
-            .onChange(of: sidebarSelection) {
-                selectedItem = nil
+            .toolbar {
+                ToolbarItem(placement: .navigation) {
+                    Button(action: { selectedItem = nil }) {
+                        Label("Back", systemImage: "chevron.left")
+                    }
+                    .keyboardShortcut(.escape, modifiers: [])
+                }
             }
-        } content: {
-            switch sidebarSelection {
-            case .feed:
-                FeedListView(selectedItem: $selectedItem)
-            case .assigned:
-                AssignedListView(selectedItem: $selectedItem)
-            case .repos:
-                ReposView()
-            case nil:
-                Text("Select a section")
-                    .foregroundStyle(.secondary)
-            }
-        } detail: {
-            switch selectedItem {
-            case .pullRequest(let pr):
-                PRDetailView(pr: pr)
-            case .issue(let issue):
-                IssueDetailView(issue: issue)
-            case nil:
-                Text("Select an item")
-                    .foregroundStyle(.secondary)
+        } else {
+            // List view with sidebar
+            NavigationSplitView {
+                List(selection: $sidebarSelection) {
+                    ForEach(SidebarItem.allCases) { item in
+                        NavigationLink(value: item) {
+                            Label(item.rawValue, systemImage: item.systemImage)
+                        }
+                    }
+                }
+                .navigationTitle("gitctl")
+            } detail: {
+                switch sidebarSelection {
+                case .feed:
+                    FeedListView(selectedItem: $selectedItem)
+                case .assigned:
+                    AssignedListView(selectedItem: $selectedItem)
+                case .repos:
+                    ReposView()
+                case nil:
+                    Text("Select a section")
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }

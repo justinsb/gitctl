@@ -575,14 +575,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c":
 			return m, tea.Quit
 		case "q":
-			if m.detailFocused {
-				m.detailFocused = false
-				return m, nil
-			}
 			if m.showDetail {
-				m.showDetail = false
-				m.detailFocused = false
-				m.resizePanes()
+				// Don't quit while viewing detail; use Escape to go back
 				return m, nil
 			}
 			return m, tea.Quit
@@ -597,22 +591,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "enter":
-			if m.showDetail && !m.detailFocused {
-				// Focus the detail pane
-				m.detailFocused = true
-				return m, nil
-			}
 			if !m.showDetail {
 				return m.openDetail()
 			}
 			return m, nil
 		case "esc":
-			if m.detailFocused {
-				m.detailFocused = false
-				return m, nil
-			}
 			if m.showDetail {
 				m.showDetail = false
+				m.detailFocused = false
 				m.resizePanes()
 				return m, nil
 			}
@@ -621,7 +607,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Route messages to the focused pane
 	var cmd tea.Cmd
-	if m.showDetail && m.detailFocused {
+	if m.showDetail {
 		m.detailViewport, cmd = m.detailViewport.Update(msg)
 	} else {
 		switch m.activeTab {
@@ -694,7 +680,7 @@ func (m Model) openDetail() (tea.Model, tea.Cmd) {
 
 	m.resizePanes()
 
-	detailWidth := m.width / 2
+	detailWidth := m.width
 	m.detailContent = buildDetailContent(title, repo, number, author, state, body, labels, nil, detailWidth)
 	m.detailViewport.SetContent(m.detailContent)
 	m.detailViewport.GotoTop()
@@ -739,7 +725,7 @@ func (m *Model) updateDetailViewport() {
 		}
 	}
 
-	detailWidth := m.width / 2
+	detailWidth := m.width
 	content := buildDetailContent(title, repo, number, author, state, body, labels, m.detailComments, detailWidth)
 	m.detailViewport.SetContent(content)
 }
@@ -794,9 +780,9 @@ func (m *Model) resizePanes() {
 	listHeight := m.height - 4
 	listWidth := m.width
 	if m.showDetail {
-		listWidth = m.width / 2
-		m.detailViewport.Width = m.width - listWidth - 2
-		m.detailViewport.Height = listHeight
+		// Detail view takes full screen (minus header line)
+		m.detailViewport.Width = m.width
+		m.detailViewport.Height = m.height - 3 // header + border + help line
 	}
 	m.feedList.SetWidth(listWidth)
 	m.feedList.SetHeight(listHeight)
@@ -860,52 +846,14 @@ func (m Model) View() string {
 	}
 
 	if m.showDetail {
-		// Split view: list on left, detail on right
-		listWidth := m.width / 2
-		detailWidth := m.width - listWidth
-
-		// Truncate list lines to listWidth
-		listLines := strings.Split(content, "\n")
+		// Full-screen detail view
+		header := detailMetaStyle.Render(fmt.Sprintf("  %s#%d", m.selectedRepo, m.selectedNumber)) +
+			"  " + detailMetaStyle.Render("ESC to go back")
 		detailStr := m.detailViewport.View()
 		if m.detailLoading {
-			detailStr = "Loading comments..."
+			detailStr = "  Loading comments..."
 		}
-		borderStyle := detailBorderStyle
-		if m.detailFocused {
-			borderStyle = borderStyle.BorderForeground(lipgloss.Color("170"))
-		}
-		detailRendered := borderStyle.Width(detailWidth - 2).Render(detailStr)
-		detailLines := strings.Split(detailRendered, "\n")
-
-		// Join side by side
-		maxLines := len(listLines)
-		if len(detailLines) > maxLines {
-			maxLines = len(detailLines)
-		}
-
-		var combined strings.Builder
-		for i := 0; i < maxLines; i++ {
-			left := ""
-			if i < len(listLines) {
-				left = listLines[i]
-			}
-			// Pad left to listWidth
-			leftRunes := []rune(left)
-			if len(leftRunes) > listWidth {
-				leftRunes = leftRunes[:listWidth]
-			}
-			padded := string(leftRunes) + strings.Repeat(" ", maxInt(0, listWidth-len(leftRunes)))
-
-			right := ""
-			if i < len(detailLines) {
-				right = detailLines[i]
-			}
-			combined.WriteString(padded)
-			combined.WriteString(right)
-			combined.WriteString("\n")
-		}
-
-		return "\n" + tabBar + "\n" + combined.String()
+		return header + "\n" + detailStr
 	}
 
 	return "\n" + tabBar + "\n" + content
