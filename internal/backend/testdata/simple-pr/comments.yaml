@@ -1,0 +1,25 @@
+- apiVersion: gitctl.justinsb.com/v1alpha1
+  kind: Comment
+  metadata:
+    name: "testorg/testrepo#42-comment-101"
+  spec:
+    body: |
+      Looks good overall! Just a few minor suggestions.
+
+      Can we add rate limiting to the login endpoint?
+  status:
+    author: "bob"
+    htmlUrl: "https://github.com/testorg/testrepo/pull/42#issuecomment-101"
+    createdAt: "2026-03-16T09:00:00Z"
+    updatedAt: "2026-03-16T09:00:00Z"
+- apiVersion: gitctl.justinsb.com/v1alpha1
+  kind: Comment
+  metadata:
+    name: "testorg/testrepo#42-comment-102"
+  spec:
+    body: "Good point, I'll add that in the next commit."
+  status:
+    author: "alice"
+    htmlUrl: "https://github.com/testorg/testrepo/pull/42#issuecomment-102"
+    createdAt: "2026-03-16T10:30:00Z"
+    updatedAt: "2026-03-16T10:30:00Z"

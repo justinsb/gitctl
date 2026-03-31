@@ -1,0 +1,11 @@
+- apiVersion: gitctl.justinsb.com/v1alpha1
+  kind: Comment
+  metadata:
+    name: "testorg/testrepo#15-comment-301"
+  spec:
+    body: "I can reproduce this. Looks like the database connection pool is exhausted."
+  status:
+    author: "alice"
+    htmlUrl: "https://github.com/testorg/testrepo/issues/15#issuecomment-301"
+    createdAt: "2026-03-18T14:00:00Z"
+    updatedAt: "2026-03-18T14:00:00Z"

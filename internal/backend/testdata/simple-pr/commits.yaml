@@ -1,0 +1,22 @@
+- apiVersion: gitctl.justinsb.com/v1alpha1
+  kind: PRCommit
+  metadata:
+    name: "abc1234567890def1234567890abcdef12345678"
+  spec:
+    message: "Add login endpoint with OAuth2 support"
+    author: "Alice Smith"
+  status:
+    sha: "abc1234567890def1234567890abcdef12345678"
+    htmlUrl: "https://github.com/testorg/testrepo/commit/abc1234567890def1234567890abcdef12345678"
+    date: "2026-03-15T10:00:00Z"
+- apiVersion: gitctl.justinsb.com/v1alpha1
+  kind: PRCommit
+  metadata:
+    name: "def4567890abc1234567890def4567890abcdef12"
+  spec:
+    message: "Add token validation middleware"
+    author: "Alice Smith"
+  status:
+    sha: "def4567890abc1234567890def4567890abcdef12"
+    htmlUrl: "https://github.com/testorg/testrepo/commit/def4567890abc1234567890def4567890abcdef12"
+    date: "2026-03-16T08:00:00Z"

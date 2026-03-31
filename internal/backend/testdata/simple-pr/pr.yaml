@@ -1,0 +1,27 @@
+apiVersion: gitctl.justinsb.com/v1alpha1
+kind: PullRequest
+metadata:
+  name: "testorg/testrepo#42"
+spec:
+  title: "Add user authentication"
+  body: |
+    This PR adds **user authentication** using OAuth2.
+
+    ## Changes
+    - Added login endpoint
+    - Added token validation middleware
+status:
+  repo: "testorg/testrepo"
+  number: 42
+  state: "open"
+  author: "alice"
+  assignees:
+    - "bob"
+  htmlUrl: "https://github.com/testorg/testrepo/pull/42"
+  draft: false
+  merged: false
+  labels:
+    - "enhancement"
+    - "auth"
+  createdAt: "2026-03-15T10:00:00Z"
+  updatedAt: "2026-03-20T14:30:00Z"

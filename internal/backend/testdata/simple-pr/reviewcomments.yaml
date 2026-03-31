@@ -1,0 +1,17 @@
+- apiVersion: gitctl.justinsb.com/v1alpha1
+  kind: ReviewComment
+  metadata:
+    name: "testorg/testrepo#42-review-201"
+  spec:
+    body: "Should we add rate limiting here before calling `validateCredentials`?"
+  status:
+    path: "auth/login.go"
+    line: 14
+    side: "RIGHT"
+    author: "bob"
+    htmlUrl: "https://github.com/testorg/testrepo/pull/42#discussion_r201"
+    createdAt: "2026-03-16T09:15:00Z"
+    updatedAt: "2026-03-16T09:15:00Z"
+    diffHunk: |
+      @@ -0,0 +1,25 @@
+      +package auth

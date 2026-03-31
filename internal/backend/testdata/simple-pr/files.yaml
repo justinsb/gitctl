@@ -1,0 +1,55 @@
+- apiVersion: gitctl.justinsb.com/v1alpha1
+  kind: PRFile
+  metadata:
+    name: "auth/login.go"
+  status:
+    filename: "auth/login.go"
+    fileStatus: "added"
+    additions: 25
+    deletions: 0
+    changes: 25
+    patch: |
+      @@ -0,0 +1,25 @@
+      +package auth
+      +
+      +import (
+      +	"net/http"
+      +)
+      +
+      +// LoginHandler handles OAuth2 login requests.
+      +func LoginHandler(w http.ResponseWriter, r *http.Request) {
+      +	if r.Method != http.MethodPost {
+      +		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+      +		return
+      +	}
+      +
+      +	token, err := validateCredentials(r)
+      +	if err != nil {
+      +		http.Error(w, "unauthorized", http.StatusUnauthorized)
+      +		return
+      +	}
+      +
+      +	writeTokenResponse(w, token)
+      +}
+- apiVersion: gitctl.justinsb.com/v1alpha1
+  kind: PRFile
+  metadata:
+    name: "main.go"
+  status:
+    filename: "main.go"
+    fileStatus: "modified"
+    additions: 3
+    deletions: 1
+    changes: 4
+    patch: |
+      @@ -10,7 +10,9 @@ import (
+       	"net/http"
+       	"log"
+       	"os"
+      +	"github.com/testorg/testrepo/auth"
+       )
+
+       func main() {
+      +	http.HandleFunc("/login", auth.LoginHandler)
+      +	http.HandleFunc("/validate", auth.ValidateHandler)
+       	log.Fatal(http.ListenAndServe(":8080", nil))

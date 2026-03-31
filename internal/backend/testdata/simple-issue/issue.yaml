@@ -1,0 +1,29 @@
+apiVersion: gitctl.justinsb.com/v1alpha1
+kind: Issue
+metadata:
+  name: "testorg/testrepo#15"
+spec:
+  title: "Login page returns 500 error"
+  body: |
+    When trying to log in with valid credentials, the server returns a **500 Internal Server Error**.
+
+    Steps to reproduce:
+    1. Go to `/login`
+    2. Enter valid credentials
+    3. Click "Submit"
+
+    Expected: redirect to dashboard
+    Actual: 500 error
+status:
+  repo: "testorg/testrepo"
+  number: 15
+  state: "open"
+  author: "charlie"
+  assignees:
+    - "alice"
+  htmlUrl: "https://github.com/testorg/testrepo/issues/15"
+  labels:
+    - "bug"
+    - "priority:high"
+  createdAt: "2026-03-18T12:00:00Z"
+  updatedAt: "2026-03-19T09:00:00Z"

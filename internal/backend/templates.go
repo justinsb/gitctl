@@ -225,6 +225,7 @@ const prDetailTemplateStr = `<!DOCTYPE html>
     {{len .Files}} file(s) changed
   </div>
   {{range .Files}}
+  {{$fileData := .}}
   <div class="file-diff">
     <div class="file-header">
       <span class="file-status-badge {{fileStatusClass .File.Status.FileStatus}}">{{fileStatusBadge .File.Status.FileStatus}}</span>
@@ -244,7 +245,7 @@ const prDetailTemplateStr = `<!DOCTYPE html>
         <td class="diff-line-num">{{if .NewLine}}{{.NewLine}}{{end}}</td>
         <td class="diff-line-content"><pre>{{.Content}}</pre></td>
       </tr>
-      {{$comments := reviewCommentsForLine $.ReviewComments $.File.Status.Filename .NewLine}}
+      {{$comments := reviewCommentsForLine $fileData.ReviewComments $fileData.File.Status.Filename .NewLine}}
       {{range $comments}}
       <tr class="diff-comment-row">
         <td colspan="3">
