@@ -308,59 +308,32 @@ struct ReposView: View {
 
 struct PRDetailView: View {
     let pr: PullRequest
-    @State private var comments: [Comment]?
-    @State private var commentError: String?
 
-    private let client = GitCtlClient()
-
-    private var pageHTML: String {
-        DetailPageBuilder.buildPRPage(pr: pr, comments: comments, commentError: commentError)
+    private var detailURL: URL {
+        let repo = pr.status?.repo ?? ""
+        let number = pr.status?.number ?? 0
+        // repo is "owner/repo", split for URL path
+        return URL(string: "http://localhost:8484/ui/repos/\(repo)/pulls/\(number)")!
     }
 
     var body: some View {
-        DetailWebView(html: pageHTML)
+        DetailWebView(url: detailURL)
             .navigationTitle("\(pr.status?.repo ?? "")#\(pr.status?.number ?? 0)")
-            .task { await loadComments() }
-    }
-
-    func loadComments() async {
-        guard let repo = pr.status?.repo, let number = pr.status?.number else {
-            return
-        }
-        do {
-            comments = try await client.listComments(repo: repo, number: number)
-        } catch {
-            commentError = "Failed to load comments: \(error.localizedDescription)"
-        }
     }
 }
 
 struct IssueDetailView: View {
     let issue: Issue
-    @State private var comments: [Comment]?
-    @State private var commentError: String?
 
-    private let client = GitCtlClient()
-
-    private var pageHTML: String {
-        DetailPageBuilder.buildIssuePage(issue: issue, comments: comments, commentError: commentError)
+    private var detailURL: URL {
+        let repo = issue.status?.repo ?? ""
+        let number = issue.status?.number ?? 0
+        return URL(string: "http://localhost:8484/ui/repos/\(repo)/issues/\(number)")!
     }
 
     var body: some View {
-        DetailWebView(html: pageHTML)
+        DetailWebView(url: detailURL)
             .navigationTitle("\(issue.status?.repo ?? "")#\(issue.status?.number ?? 0)")
-            .task { await loadComments() }
-    }
-
-    func loadComments() async {
-        guard let repo = issue.status?.repo, let number = issue.status?.number else {
-            return
-        }
-        do {
-            comments = try await client.listComments(repo: repo, number: number)
-        } catch {
-            commentError = "Failed to load comments: \(error.localizedDescription)"
-        }
     }
 }
 

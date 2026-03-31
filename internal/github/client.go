@@ -299,6 +299,60 @@ func convertToIssues(items []githubSearchItem) []api.Issue {
 	return issues
 }
 
+// githubCommit represents a commit from the GitHub Pull Request Commits API.
+type githubCommit struct {
+	SHA     string `json:"sha"`
+	HTMLURL string `json:"html_url"`
+	Commit  struct {
+		Message string `json:"message"`
+		Author  struct {
+			Name string `json:"name"`
+			Date string `json:"date"`
+		} `json:"author"`
+	} `json:"commit"`
+}
+
+// githubCheckRunsResponse wraps the check runs array from the GitHub API.
+type githubCheckRunsResponse struct {
+	CheckRuns []githubCheckRun `json:"check_runs"`
+}
+
+type githubCheckRun struct {
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	Status      string `json:"status"`
+	Conclusion  string `json:"conclusion"`
+	DetailsURL  string `json:"details_url"`
+	StartedAt   string `json:"started_at"`
+	CompletedAt string `json:"completed_at"`
+}
+
+// githubPRFile represents a changed file from the GitHub Pull Request Files API.
+type githubPRFile struct {
+	SHA       string `json:"sha"`
+	Filename  string `json:"filename"`
+	Status    string `json:"status"`
+	Additions int    `json:"additions"`
+	Deletions int    `json:"deletions"`
+	Changes   int    `json:"changes"`
+	Patch     string `json:"patch"`
+}
+
+// githubReviewComment represents a review comment from the GitHub Pull Request Review Comments API.
+type githubReviewComment struct {
+	ID        int        `json:"id"`
+	Body      string     `json:"body"`
+	Path      string     `json:"path"`
+	Line      int        `json:"line"`
+	Side      string     `json:"side"`
+	HTMLURL   string     `json:"html_url"`
+	CreatedAt string     `json:"created_at"`
+	UpdatedAt string     `json:"updated_at"`
+	User      githubUser `json:"user"`
+	DiffHunk  string     `json:"diff_hunk"`
+	InReplyTo int        `json:"in_reply_to_id"`
+}
+
 type githubComment struct {
 	ID        int        `json:"id"`
 	Body      string     `json:"body"`
@@ -357,4 +411,289 @@ func (c *Client) ListIssueComments(ctx context.Context, repo string, number int)
 	}
 
 	return comments, nil
+}
+
+// ListPRCommits fetches commits for a pull request.
+func (c *Client) ListPRCommits(ctx context.Context, repo string, number int) ([]api.PRCommit, error) {
+	u := fmt.Sprintf("%s/repos/%s/pulls/%d/commits?per_page=100", c.baseURL, repo, number)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	c.setAuthHeader(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch PR commits: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	var ghCommits []githubCommit
+	if err := json.NewDecoder(resp.Body).Decode(&ghCommits); err != nil {
+		return nil, fmt.Errorf("failed to decode commits response: %w", err)
+	}
+
+	commits := make([]api.PRCommit, len(ghCommits))
+	for i, gc := range ghCommits {
+		commits[i] = api.PRCommit{
+			APIVersion: api.APIVersion,
+			Kind:       api.PRCommitKind,
+			Metadata: api.ObjectMeta{
+				Name: gc.SHA,
+			},
+			Spec: api.PRCommitSpec{
+				Message: gc.Commit.Message,
+				Author:  gc.Commit.Author.Name,
+			},
+			Status: api.PRCommitStatus{
+				SHA:     gc.SHA,
+				HTMLURL: gc.HTMLURL,
+				Date:    gc.Commit.Author.Date,
+			},
+		}
+	}
+
+	return commits, nil
+}
+
+// ListCheckRuns fetches check runs for a given git ref (commit SHA or branch).
+func (c *Client) ListCheckRuns(ctx context.Context, repo string, ref string) ([]api.CheckRun, error) {
+	u := fmt.Sprintf("%s/repos/%s/commits/%s/check-runs?per_page=100", c.baseURL, repo, ref)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Accept", "application/vnd.github+json")
+	c.setAuthHeader(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch check runs: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	var result githubCheckRunsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode check runs response: %w", err)
+	}
+
+	checks := make([]api.CheckRun, len(result.CheckRuns))
+	for i, gc := range result.CheckRuns {
+		checks[i] = api.CheckRun{
+			APIVersion: api.APIVersion,
+			Kind:       api.CheckRunKind,
+			Metadata: api.ObjectMeta{
+				Name: fmt.Sprintf("%d", gc.ID),
+			},
+			Spec: api.CheckRunSpec{
+				Name: gc.Name,
+			},
+			Status: api.CheckRunStatus{
+				Status:      gc.Status,
+				Conclusion:  gc.Conclusion,
+				DetailsURL:  gc.DetailsURL,
+				StartedAt:   gc.StartedAt,
+				CompletedAt: gc.CompletedAt,
+			},
+		}
+	}
+
+	return checks, nil
+}
+
+// ListPRFiles fetches the list of changed files for a pull request.
+func (c *Client) ListPRFiles(ctx context.Context, repo string, number int) ([]api.PRFile, error) {
+	u := fmt.Sprintf("%s/repos/%s/pulls/%d/files?per_page=100", c.baseURL, repo, number)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	c.setAuthHeader(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch PR files: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	var ghFiles []githubPRFile
+	if err := json.NewDecoder(resp.Body).Decode(&ghFiles); err != nil {
+		return nil, fmt.Errorf("failed to decode files response: %w", err)
+	}
+
+	files := make([]api.PRFile, len(ghFiles))
+	for i, gf := range ghFiles {
+		files[i] = api.PRFile{
+			APIVersion: api.APIVersion,
+			Kind:       api.PRFileKind,
+			Metadata: api.ObjectMeta{
+				Name: gf.Filename,
+			},
+			Status: api.PRFileStatus{
+				Filename:   gf.Filename,
+				FileStatus: gf.Status,
+				Additions:  gf.Additions,
+				Deletions:  gf.Deletions,
+				Changes:    gf.Changes,
+				Patch:      gf.Patch,
+			},
+		}
+	}
+
+	return files, nil
+}
+
+// ListReviewComments fetches file-level review comments for a pull request.
+func (c *Client) ListReviewComments(ctx context.Context, repo string, number int) ([]api.ReviewComment, error) {
+	u := fmt.Sprintf("%s/repos/%s/pulls/%d/comments?per_page=100", c.baseURL, repo, number)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	c.setAuthHeader(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch review comments: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	var ghComments []githubReviewComment
+	if err := json.NewDecoder(resp.Body).Decode(&ghComments); err != nil {
+		return nil, fmt.Errorf("failed to decode review comments response: %w", err)
+	}
+
+	comments := make([]api.ReviewComment, len(ghComments))
+	for i, gc := range ghComments {
+		comments[i] = api.ReviewComment{
+			APIVersion: api.APIVersion,
+			Kind:       api.ReviewCommentKind,
+			Metadata: api.ObjectMeta{
+				Name: fmt.Sprintf("%s#%d-review-%d", repo, number, gc.ID),
+			},
+			Spec: api.ReviewCommentSpec{
+				Body: gc.Body,
+			},
+			Status: api.ReviewCommentStatus{
+				Path:      gc.Path,
+				Line:      gc.Line,
+				Side:      gc.Side,
+				Author:    gc.User.Login,
+				HTMLURL:   gc.HTMLURL,
+				CreatedAt: gc.CreatedAt,
+				UpdatedAt: gc.UpdatedAt,
+				DiffHunk:  gc.DiffHunk,
+				InReplyTo: gc.InReplyTo,
+			},
+		}
+	}
+
+	return comments, nil
+}
+
+// CreateIssueComment creates a new comment on an issue or pull request.
+func (c *Client) CreateIssueComment(ctx context.Context, repo string, number int, body string) error {
+	u := fmt.Sprintf("%s/repos/%s/issues/%d/comments", c.baseURL, repo, number)
+
+	payload := struct {
+		Body string `json:"body"`
+	}{Body: body}
+
+	jsonBody, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal comment: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", u, strings.NewReader(string(jsonBody)))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	req.Header.Set("Content-Type", "application/json")
+	c.setAuthHeader(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to create comment: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		return fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+// CreateReviewComment creates a new file-level review comment on a pull request.
+func (c *Client) CreateReviewComment(ctx context.Context, repo string, number int, body string, commitSHA string, path string, line int) error {
+	u := fmt.Sprintf("%s/repos/%s/pulls/%d/comments", c.baseURL, repo, number)
+
+	payload := struct {
+		Body     string `json:"body"`
+		CommitID string `json:"commit_id"`
+		Path     string `json:"path"`
+		Line     int    `json:"line"`
+		Side     string `json:"side"`
+	}{
+		Body:     body,
+		CommitID: commitSHA,
+		Path:     path,
+		Line:     line,
+		Side:     "RIGHT",
+	}
+
+	jsonBody, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal review comment: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", u, strings.NewReader(string(jsonBody)))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	req.Header.Set("Content-Type", "application/json")
+	c.setAuthHeader(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to create review comment: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		return fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	return nil
 }

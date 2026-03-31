@@ -49,3 +49,30 @@ func (s *ResourceStore[T]) ReplaceAll(ctx context.Context, key string, items []T
 	s.items[key] = stored
 	return nil
 }
+
+// Invalidate removes a key from the store, forcing the next access to re-fetch.
+func (s *ResourceStore[T]) Invalidate(ctx context.Context, key string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	delete(s.items, key)
+}
+
+// ListAll returns all items across all keys.
+// Returns a map of key to items slice, and whether any data exists.
+func (s *ResourceStore[T]) ListAll(ctx context.Context) (map[string][]T, bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if len(s.items) == 0 {
+		return nil, false, nil
+	}
+
+	result := make(map[string][]T, len(s.items))
+	for k, v := range s.items {
+		out := make([]T, len(v))
+		copy(out, v)
+		result[k] = out
+	}
+	return result, true, nil
+}

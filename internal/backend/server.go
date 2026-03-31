@@ -19,23 +19,41 @@ import (
 
 // Server is the HTTP server exposing the gitctl Kubernetes-style API.
 type Server struct {
-	repoStore    *storage.ResourceStore[api.GitRepo]
-	prStore      *storage.ResourceStore[api.PullRequest]
-	issueStore   *storage.ResourceStore[api.Issue]
-	commentStore *storage.ResourceStore[api.Comment]
-	githubClient *github.Client
-	mux          *http.ServeMux
+	repoStore           *storage.ResourceStore[api.GitRepo]
+	prStore             *storage.ResourceStore[api.PullRequest]
+	issueStore          *storage.ResourceStore[api.Issue]
+	commentStore        *storage.ResourceStore[api.Comment]
+	commitStore         *storage.ResourceStore[api.PRCommit]
+	checkRunStore       *storage.ResourceStore[api.CheckRun]
+	prFileStore         *storage.ResourceStore[api.PRFile]
+	reviewCommentStore  *storage.ResourceStore[api.ReviewComment]
+	githubClient        *github.Client
+	mux                 *http.ServeMux
 }
 
 // NewServer creates a new HTTP Server and registers its routes.
-func NewServer(repoStore *storage.ResourceStore[api.GitRepo], prStore *storage.ResourceStore[api.PullRequest], issueStore *storage.ResourceStore[api.Issue], commentStore *storage.ResourceStore[api.Comment], githubClient *github.Client) *Server {
+func NewServer(
+	repoStore *storage.ResourceStore[api.GitRepo],
+	prStore *storage.ResourceStore[api.PullRequest],
+	issueStore *storage.ResourceStore[api.Issue],
+	commentStore *storage.ResourceStore[api.Comment],
+	commitStore *storage.ResourceStore[api.PRCommit],
+	checkRunStore *storage.ResourceStore[api.CheckRun],
+	prFileStore *storage.ResourceStore[api.PRFile],
+	reviewCommentStore *storage.ResourceStore[api.ReviewComment],
+	githubClient *github.Client,
+) *Server {
 	s := &Server{
-		repoStore:    repoStore,
-		prStore:      prStore,
-		issueStore:   issueStore,
-		commentStore: commentStore,
-		githubClient: githubClient,
-		mux:          http.NewServeMux(),
+		repoStore:          repoStore,
+		prStore:            prStore,
+		issueStore:         issueStore,
+		commentStore:       commentStore,
+		commitStore:        commitStore,
+		checkRunStore:      checkRunStore,
+		prFileStore:        prFileStore,
+		reviewCommentStore: reviewCommentStore,
+		githubClient:       githubClient,
+		mux:                http.NewServeMux(),
 	}
 
 	base := "/apis/" + api.Group + "/" + api.Version
@@ -43,6 +61,8 @@ func NewServer(repoStore *storage.ResourceStore[api.GitRepo], prStore *storage.R
 	s.mux.HandleFunc(base+"/pullrequests", s.handleListPullRequests)
 	s.mux.HandleFunc(base+"/issues", s.handleListIssues)
 	s.mux.HandleFunc(base+"/comments", s.handleListComments)
+
+	s.registerUIRoutes()
 
 	return s
 }

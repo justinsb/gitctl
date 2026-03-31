@@ -23,6 +23,22 @@ const (
 	CommentKind = "Comment"
 	// CommentListKind is the Kind name for a list of Comment resources.
 	CommentListKind = "CommentList"
+	// PRCommitKind is the Kind name for a single PRCommit resource.
+	PRCommitKind = "PRCommit"
+	// PRCommitListKind is the Kind name for a list of PRCommit resources.
+	PRCommitListKind = "PRCommitList"
+	// CheckRunKind is the Kind name for a single CheckRun resource.
+	CheckRunKind = "CheckRun"
+	// CheckRunListKind is the Kind name for a list of CheckRun resources.
+	CheckRunListKind = "CheckRunList"
+	// PRFileKind is the Kind name for a single PRFile resource.
+	PRFileKind = "PRFile"
+	// PRFileListKind is the Kind name for a list of PRFile resources.
+	PRFileListKind = "PRFileList"
+	// ReviewCommentKind is the Kind name for a single ReviewComment resource.
+	ReviewCommentKind = "ReviewComment"
+	// ReviewCommentListKind is the Kind name for a list of ReviewComment resources.
+	ReviewCommentListKind = "ReviewCommentList"
 	// APIVersion is the combined apiVersion field value.
 	APIVersion = Group + "/" + Version
 )
@@ -213,4 +229,130 @@ type CommentList struct {
 	Kind       string    `json:"kind,omitempty"`
 	Metadata   ListMeta  `json:"metadata,omitempty"`
 	Items      []Comment `json:"items"`
+}
+
+// PRCommitSpec contains user-specified fields for a commit in a pull request.
+type PRCommitSpec struct {
+	Message string `json:"message,omitempty"`
+	Author  string `json:"author,omitempty"`
+}
+
+// PRCommitStatus contains GitHub-generated fields for a commit.
+type PRCommitStatus struct {
+	SHA     string `json:"sha,omitempty"`
+	HTMLURL string `json:"htmlUrl,omitempty"`
+	Date    string `json:"date,omitempty"`
+}
+
+// PRCommit represents a commit within a pull request.
+type PRCommit struct {
+	APIVersion string         `json:"apiVersion,omitempty"`
+	Kind       string         `json:"kind,omitempty"`
+	Metadata   ObjectMeta     `json:"metadata,omitempty"`
+	Spec       PRCommitSpec   `json:"spec,omitempty"`
+	Status     PRCommitStatus `json:"status,omitempty"`
+}
+
+// PRCommitList is a list of PRCommit resources.
+type PRCommitList struct {
+	APIVersion string     `json:"apiVersion,omitempty"`
+	Kind       string     `json:"kind,omitempty"`
+	Metadata   ListMeta   `json:"metadata,omitempty"`
+	Items      []PRCommit `json:"items"`
+}
+
+// CheckRunSpec contains user-specified fields for a CI check run.
+type CheckRunSpec struct {
+	Name string `json:"name,omitempty"`
+}
+
+// CheckRunStatus contains GitHub-generated fields for a check run.
+type CheckRunStatus struct {
+	Status      string `json:"status,omitempty"`
+	Conclusion  string `json:"conclusion,omitempty"`
+	DetailsURL  string `json:"detailsUrl,omitempty"`
+	StartedAt   string `json:"startedAt,omitempty"`
+	CompletedAt string `json:"completedAt,omitempty"`
+}
+
+// CheckRun represents a CI status check run.
+type CheckRun struct {
+	APIVersion string         `json:"apiVersion,omitempty"`
+	Kind       string         `json:"kind,omitempty"`
+	Metadata   ObjectMeta     `json:"metadata,omitempty"`
+	Spec       CheckRunSpec   `json:"spec,omitempty"`
+	Status     CheckRunStatus `json:"status,omitempty"`
+}
+
+// CheckRunList is a list of CheckRun resources.
+type CheckRunList struct {
+	APIVersion string     `json:"apiVersion,omitempty"`
+	Kind       string     `json:"kind,omitempty"`
+	Metadata   ListMeta   `json:"metadata,omitempty"`
+	Items      []CheckRun `json:"items"`
+}
+
+// PRFileSpec is empty; file metadata is entirely GitHub-generated.
+type PRFileSpec struct{}
+
+// PRFileStatus contains GitHub-generated fields for a changed file in a PR.
+type PRFileStatus struct {
+	Filename   string `json:"filename,omitempty"`
+	FileStatus string `json:"fileStatus,omitempty"`
+	Additions  int    `json:"additions,omitempty"`
+	Deletions  int    `json:"deletions,omitempty"`
+	Changes    int    `json:"changes,omitempty"`
+	Patch      string `json:"patch,omitempty"`
+}
+
+// PRFile represents a changed file in a pull request.
+type PRFile struct {
+	APIVersion string       `json:"apiVersion,omitempty"`
+	Kind       string       `json:"kind,omitempty"`
+	Metadata   ObjectMeta   `json:"metadata,omitempty"`
+	Spec       PRFileSpec   `json:"spec,omitempty"`
+	Status     PRFileStatus `json:"status,omitempty"`
+}
+
+// PRFileList is a list of PRFile resources.
+type PRFileList struct {
+	APIVersion string   `json:"apiVersion,omitempty"`
+	Kind       string   `json:"kind,omitempty"`
+	Metadata   ListMeta `json:"metadata,omitempty"`
+	Items      []PRFile `json:"items"`
+}
+
+// ReviewCommentSpec contains user-specified fields for a file-level review comment.
+type ReviewCommentSpec struct {
+	Body string `json:"body,omitempty"`
+}
+
+// ReviewCommentStatus contains GitHub-generated fields for a review comment.
+type ReviewCommentStatus struct {
+	Path      string `json:"path,omitempty"`
+	Line      int    `json:"line,omitempty"`
+	Side      string `json:"side,omitempty"`
+	Author    string `json:"author,omitempty"`
+	HTMLURL   string `json:"htmlUrl,omitempty"`
+	CreatedAt string `json:"createdAt,omitempty"`
+	UpdatedAt string `json:"updatedAt,omitempty"`
+	DiffHunk  string `json:"diffHunk,omitempty"`
+	InReplyTo int    `json:"inReplyTo,omitempty"`
+}
+
+// ReviewComment represents a file-level review comment on a pull request.
+type ReviewComment struct {
+	APIVersion string              `json:"apiVersion,omitempty"`
+	Kind       string              `json:"kind,omitempty"`
+	Metadata   ObjectMeta          `json:"metadata,omitempty"`
+	Spec       ReviewCommentSpec   `json:"spec,omitempty"`
+	Status     ReviewCommentStatus `json:"status,omitempty"`
+}
+
+// ReviewCommentList is a list of ReviewComment resources.
+type ReviewCommentList struct {
+	APIVersion string          `json:"apiVersion,omitempty"`
+	Kind       string          `json:"kind,omitempty"`
+	Metadata   ListMeta        `json:"metadata,omitempty"`
+	Items      []ReviewComment `json:"items"`
 }
