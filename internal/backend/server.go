@@ -13,6 +13,7 @@ import (
 	"mime"
 
 	"github.com/justinsb/gitctl/internal/api"
+	"github.com/justinsb/gitctl/klient/meta"
 	"github.com/justinsb/gitctl/internal/github"
 	"github.com/justinsb/gitctl/internal/storage"
 )
@@ -98,9 +99,11 @@ func (s *Server) handleListGitRepos(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Found %d repositories for %s", len(repos), username)
 
 	list := api.GitRepoList{
-		APIVersion: api.APIVersion,
-		Kind:       api.GitRepoListKind,
-		Items:      repos,
+		KubeList: meta.KubeList{
+			APIVersion: api.APIVersion,
+			Kind:       api.GitRepoListKind,
+		},
+		Items: repos,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -142,9 +145,11 @@ func (s *Server) handleListPullRequests(w http.ResponseWriter, r *http.Request) 
 	log.Printf("Found %d pull requests for %s", len(prs), key)
 
 	list := api.PullRequestList{
-		APIVersion: api.APIVersion,
-		Kind:       api.PullRequestListKind,
-		Items:      prs,
+		KubeList: meta.KubeList{
+			APIVersion: api.APIVersion,
+			Kind:       api.PullRequestListKind,
+		},
+		Items: prs,
 	}
 
 	if wantsHTML(r) {
@@ -190,9 +195,11 @@ func (s *Server) handleListIssues(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Found %d issues for %s", len(issues), key)
 
 	list := api.IssueList{
-		APIVersion: api.APIVersion,
-		Kind:       api.IssueListKind,
-		Items:      issues,
+		KubeList: meta.KubeList{
+			APIVersion: api.APIVersion,
+			Kind:       api.IssueListKind,
+		},
+		Items: issues,
 	}
 
 	if wantsHTML(r) {
@@ -272,9 +279,11 @@ func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Found %d comments for %s (cached=%v)", len(comments), key, cached)
 
 	list := api.CommentList{
-		APIVersion: api.APIVersion,
-		Kind:       api.CommentListKind,
-		Items:      comments,
+		KubeList: meta.KubeList{
+			APIVersion: api.APIVersion,
+			Kind:       api.CommentListKind,
+		},
+		Items: comments,
 	}
 
 	if wantsHTML(r) {

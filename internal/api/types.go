@@ -2,6 +2,8 @@
 // Resources follow the Kubernetes wire protocol (JSON over REST).
 package api
 
+import "github.com/justinsb/gitctl/klient/meta"
+
 const (
 	// Group is the API group for gitctl resources.
 	Group = "gitctl.justinsb.com"
@@ -43,16 +45,6 @@ const (
 	APIVersion = Group + "/" + Version
 )
 
-// ObjectMeta holds metadata common to all resources.
-type ObjectMeta struct {
-	Name      string `json:"name,omitempty"`
-	Namespace string `json:"namespace,omitempty"`
-}
-
-// ListMeta holds metadata common to list resources.
-// Reserved for future use (e.g. resourceVersion, continue token).
-type ListMeta struct{}
-
 // GitRepoSpec contains user-specified fields for a GitHub repository.
 type GitRepoSpec struct {
 	// Description is the human-readable description set by the repository owner.
@@ -88,19 +80,15 @@ type GitRepoStatus struct {
 // GitRepo represents a GitHub repository as a Kubernetes-style CRD resource.
 // Group: gitctl.justinsb.com, Version: v1alpha1, Kind: GitRepo.
 type GitRepo struct {
-	APIVersion string     `json:"apiVersion,omitempty"`
-	Kind       string     `json:"kind,omitempty"`
-	Metadata   ObjectMeta    `json:"metadata,omitempty"`
-	Spec       GitRepoSpec   `json:"spec,omitempty"`
-	Status     GitRepoStatus `json:"status,omitempty"`
+	meta.KubeObject `json:",inline"`
+	Spec            GitRepoSpec   `json:"spec,omitempty"`
+	Status          GitRepoStatus `json:"status,omitempty"`
 }
 
 // GitRepoList is a list of GitRepo resources, following the Kubernetes list convention.
 type GitRepoList struct {
-	APIVersion string    `json:"apiVersion,omitempty"`
-	Kind       string    `json:"kind,omitempty"`
-	Metadata   ListMeta  `json:"metadata,omitempty"`
-	Items      []GitRepo `json:"items"`
+	meta.KubeList `json:",inline"`
+	Items         []GitRepo `json:"items"`
 }
 
 // PullRequestSpec contains user-specified fields for a pull request.
@@ -137,19 +125,15 @@ type PullRequestStatus struct {
 
 // PullRequest represents a GitHub pull request as a Kubernetes-style CRD resource.
 type PullRequest struct {
-	APIVersion string              `json:"apiVersion,omitempty"`
-	Kind       string              `json:"kind,omitempty"`
-	Metadata   ObjectMeta          `json:"metadata,omitempty"`
-	Spec       PullRequestSpec     `json:"spec,omitempty"`
-	Status     PullRequestStatus   `json:"status,omitempty"`
+	meta.KubeObject `json:",inline"`
+	Spec            PullRequestSpec   `json:"spec,omitempty"`
+	Status          PullRequestStatus `json:"status,omitempty"`
 }
 
 // PullRequestList is a list of PullRequest resources.
 type PullRequestList struct {
-	APIVersion string          `json:"apiVersion,omitempty"`
-	Kind       string          `json:"kind,omitempty"`
-	Metadata   ListMeta        `json:"metadata,omitempty"`
-	Items      []PullRequest   `json:"items"`
+	meta.KubeList `json:",inline"`
+	Items         []PullRequest `json:"items"`
 }
 
 // IssueSpec contains user-specified fields for an issue.
@@ -182,19 +166,15 @@ type IssueStatus struct {
 
 // Issue represents a GitHub issue as a Kubernetes-style CRD resource.
 type Issue struct {
-	APIVersion string      `json:"apiVersion,omitempty"`
-	Kind       string      `json:"kind,omitempty"`
-	Metadata   ObjectMeta  `json:"metadata,omitempty"`
-	Spec       IssueSpec   `json:"spec,omitempty"`
-	Status     IssueStatus `json:"status,omitempty"`
+	meta.KubeObject `json:",inline"`
+	Spec            IssueSpec   `json:"spec,omitempty"`
+	Status          IssueStatus `json:"status,omitempty"`
 }
 
 // IssueList is a list of Issue resources.
 type IssueList struct {
-	APIVersion string    `json:"apiVersion,omitempty"`
-	Kind       string    `json:"kind,omitempty"`
-	Metadata   ListMeta  `json:"metadata,omitempty"`
-	Items      []Issue   `json:"items"`
+	meta.KubeList `json:",inline"`
+	Items         []Issue `json:"items"`
 }
 
 // CommentSpec contains user-specified fields for a comment.
@@ -216,19 +196,15 @@ type CommentStatus struct {
 
 // Comment represents a GitHub issue or PR comment as a Kubernetes-style CRD resource.
 type Comment struct {
-	APIVersion string        `json:"apiVersion,omitempty"`
-	Kind       string        `json:"kind,omitempty"`
-	Metadata   ObjectMeta    `json:"metadata,omitempty"`
-	Spec       CommentSpec   `json:"spec,omitempty"`
-	Status     CommentStatus `json:"status,omitempty"`
+	meta.KubeObject `json:",inline"`
+	Spec            CommentSpec   `json:"spec,omitempty"`
+	Status          CommentStatus `json:"status,omitempty"`
 }
 
 // CommentList is a list of Comment resources.
 type CommentList struct {
-	APIVersion string    `json:"apiVersion,omitempty"`
-	Kind       string    `json:"kind,omitempty"`
-	Metadata   ListMeta  `json:"metadata,omitempty"`
-	Items      []Comment `json:"items"`
+	meta.KubeList `json:",inline"`
+	Items         []Comment `json:"items"`
 }
 
 // PRCommitSpec contains user-specified fields for a commit in a pull request.
@@ -246,19 +222,15 @@ type PRCommitStatus struct {
 
 // PRCommit represents a commit within a pull request.
 type PRCommit struct {
-	APIVersion string         `json:"apiVersion,omitempty"`
-	Kind       string         `json:"kind,omitempty"`
-	Metadata   ObjectMeta     `json:"metadata,omitempty"`
-	Spec       PRCommitSpec   `json:"spec,omitempty"`
-	Status     PRCommitStatus `json:"status,omitempty"`
+	meta.KubeObject `json:",inline"`
+	Spec            PRCommitSpec   `json:"spec,omitempty"`
+	Status          PRCommitStatus `json:"status,omitempty"`
 }
 
 // PRCommitList is a list of PRCommit resources.
 type PRCommitList struct {
-	APIVersion string     `json:"apiVersion,omitempty"`
-	Kind       string     `json:"kind,omitempty"`
-	Metadata   ListMeta   `json:"metadata,omitempty"`
-	Items      []PRCommit `json:"items"`
+	meta.KubeList `json:",inline"`
+	Items         []PRCommit `json:"items"`
 }
 
 // CheckRunSpec contains user-specified fields for a CI check run.
@@ -277,19 +249,15 @@ type CheckRunStatus struct {
 
 // CheckRun represents a CI status check run.
 type CheckRun struct {
-	APIVersion string         `json:"apiVersion,omitempty"`
-	Kind       string         `json:"kind,omitempty"`
-	Metadata   ObjectMeta     `json:"metadata,omitempty"`
-	Spec       CheckRunSpec   `json:"spec,omitempty"`
-	Status     CheckRunStatus `json:"status,omitempty"`
+	meta.KubeObject `json:",inline"`
+	Spec            CheckRunSpec   `json:"spec,omitempty"`
+	Status          CheckRunStatus `json:"status,omitempty"`
 }
 
 // CheckRunList is a list of CheckRun resources.
 type CheckRunList struct {
-	APIVersion string     `json:"apiVersion,omitempty"`
-	Kind       string     `json:"kind,omitempty"`
-	Metadata   ListMeta   `json:"metadata,omitempty"`
-	Items      []CheckRun `json:"items"`
+	meta.KubeList `json:",inline"`
+	Items         []CheckRun `json:"items"`
 }
 
 // PRFileSpec is empty; file metadata is entirely GitHub-generated.
@@ -307,19 +275,15 @@ type PRFileStatus struct {
 
 // PRFile represents a changed file in a pull request.
 type PRFile struct {
-	APIVersion string       `json:"apiVersion,omitempty"`
-	Kind       string       `json:"kind,omitempty"`
-	Metadata   ObjectMeta   `json:"metadata,omitempty"`
-	Spec       PRFileSpec   `json:"spec,omitempty"`
-	Status     PRFileStatus `json:"status,omitempty"`
+	meta.KubeObject `json:",inline"`
+	Spec            PRFileSpec   `json:"spec,omitempty"`
+	Status          PRFileStatus `json:"status,omitempty"`
 }
 
 // PRFileList is a list of PRFile resources.
 type PRFileList struct {
-	APIVersion string   `json:"apiVersion,omitempty"`
-	Kind       string   `json:"kind,omitempty"`
-	Metadata   ListMeta `json:"metadata,omitempty"`
-	Items      []PRFile `json:"items"`
+	meta.KubeList `json:",inline"`
+	Items         []PRFile `json:"items"`
 }
 
 // ReviewCommentSpec contains user-specified fields for a file-level review comment.
@@ -342,17 +306,13 @@ type ReviewCommentStatus struct {
 
 // ReviewComment represents a file-level review comment on a pull request.
 type ReviewComment struct {
-	APIVersion string              `json:"apiVersion,omitempty"`
-	Kind       string              `json:"kind,omitempty"`
-	Metadata   ObjectMeta          `json:"metadata,omitempty"`
-	Spec       ReviewCommentSpec   `json:"spec,omitempty"`
-	Status     ReviewCommentStatus `json:"status,omitempty"`
+	meta.KubeObject `json:",inline"`
+	Spec            ReviewCommentSpec   `json:"spec,omitempty"`
+	Status          ReviewCommentStatus `json:"status,omitempty"`
 }
 
 // ReviewCommentList is a list of ReviewComment resources.
 type ReviewCommentList struct {
-	APIVersion string          `json:"apiVersion,omitempty"`
-	Kind       string          `json:"kind,omitempty"`
-	Metadata   ListMeta        `json:"metadata,omitempty"`
-	Items      []ReviewComment `json:"items"`
+	meta.KubeList `json:",inline"`
+	Items         []ReviewComment `json:"items"`
 }

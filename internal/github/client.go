@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/justinsb/gitctl/internal/api"
+	"github.com/justinsb/gitctl/klient/meta"
 )
 
 // Client is a GitHub API client
@@ -89,10 +90,12 @@ func (c *Client) ListRepositories(ctx context.Context, username string) ([]api.G
 	repos := make([]api.GitRepo, len(githubRepos))
 	for i, gr := range githubRepos {
 		repos[i] = api.GitRepo{
-			APIVersion: api.APIVersion,
-			Kind:       api.GitRepoKind,
-			Metadata: api.ObjectMeta{
-				Name: gr.Name,
+			KubeObject: meta.KubeObject{
+				APIVersion: api.APIVersion,
+				Kind:       api.GitRepoKind,
+				Metadata: meta.ObjectMeta{
+					Name: gr.Name,
+				},
 			},
 			Spec: api.GitRepoSpec{
 				Description: gr.Description,
@@ -235,10 +238,12 @@ func convertToPullRequests(items []githubSearchItem) []api.PullRequest {
 		}
 		merged := item.PullRequest != nil && item.PullRequest.MergedAt != ""
 		prs[i] = api.PullRequest{
-			APIVersion: api.APIVersion,
-			Kind:       api.PullRequestKind,
-			Metadata: api.ObjectMeta{
-				Name: fmt.Sprintf("%s#%d", repoFullName(item.RepositoryURL), item.Number),
+			KubeObject: meta.KubeObject{
+				APIVersion: api.APIVersion,
+				Kind:       api.PullRequestKind,
+				Metadata: meta.ObjectMeta{
+					Name: fmt.Sprintf("%s#%d", repoFullName(item.RepositoryURL), item.Number),
+				},
 			},
 			Spec: api.PullRequestSpec{
 				Title: item.Title,
@@ -274,10 +279,12 @@ func convertToIssues(items []githubSearchItem) []api.Issue {
 			labels[j] = l.Name
 		}
 		issues[i] = api.Issue{
-			APIVersion: api.APIVersion,
-			Kind:       api.IssueKind,
-			Metadata: api.ObjectMeta{
-				Name: fmt.Sprintf("%s#%d", repoFullName(item.RepositoryURL), item.Number),
+			KubeObject: meta.KubeObject{
+				APIVersion: api.APIVersion,
+				Kind:       api.IssueKind,
+				Metadata: meta.ObjectMeta{
+					Name: fmt.Sprintf("%s#%d", repoFullName(item.RepositoryURL), item.Number),
+				},
 			},
 			Spec: api.IssueSpec{
 				Title: item.Title,
@@ -393,10 +400,12 @@ func (c *Client) ListIssueComments(ctx context.Context, repo string, number int)
 	comments := make([]api.Comment, len(ghComments))
 	for i, gc := range ghComments {
 		comments[i] = api.Comment{
-			APIVersion: api.APIVersion,
-			Kind:       api.CommentKind,
-			Metadata: api.ObjectMeta{
-				Name: fmt.Sprintf("%s#%d-comment-%d", repo, number, gc.ID),
+			KubeObject: meta.KubeObject{
+				APIVersion: api.APIVersion,
+				Kind:       api.CommentKind,
+				Metadata: meta.ObjectMeta{
+					Name: fmt.Sprintf("%s#%d-comment-%d", repo, number, gc.ID),
+				},
 			},
 			Spec: api.CommentSpec{
 				Body: gc.Body,
@@ -443,10 +452,12 @@ func (c *Client) ListPRCommits(ctx context.Context, repo string, number int) ([]
 	commits := make([]api.PRCommit, len(ghCommits))
 	for i, gc := range ghCommits {
 		commits[i] = api.PRCommit{
-			APIVersion: api.APIVersion,
-			Kind:       api.PRCommitKind,
-			Metadata: api.ObjectMeta{
-				Name: gc.SHA,
+			KubeObject: meta.KubeObject{
+				APIVersion: api.APIVersion,
+				Kind:       api.PRCommitKind,
+				Metadata: meta.ObjectMeta{
+					Name: gc.SHA,
+				},
 			},
 			Spec: api.PRCommitSpec{
 				Message: gc.Commit.Message,
@@ -493,10 +504,12 @@ func (c *Client) ListCheckRuns(ctx context.Context, repo string, ref string) ([]
 	checks := make([]api.CheckRun, len(result.CheckRuns))
 	for i, gc := range result.CheckRuns {
 		checks[i] = api.CheckRun{
-			APIVersion: api.APIVersion,
-			Kind:       api.CheckRunKind,
-			Metadata: api.ObjectMeta{
-				Name: fmt.Sprintf("%d", gc.ID),
+			KubeObject: meta.KubeObject{
+				APIVersion: api.APIVersion,
+				Kind:       api.CheckRunKind,
+				Metadata: meta.ObjectMeta{
+					Name: fmt.Sprintf("%d", gc.ID),
+				},
 			},
 			Spec: api.CheckRunSpec{
 				Name: gc.Name,
@@ -544,10 +557,12 @@ func (c *Client) ListPRFiles(ctx context.Context, repo string, number int) ([]ap
 	files := make([]api.PRFile, len(ghFiles))
 	for i, gf := range ghFiles {
 		files[i] = api.PRFile{
-			APIVersion: api.APIVersion,
-			Kind:       api.PRFileKind,
-			Metadata: api.ObjectMeta{
-				Name: gf.Filename,
+			KubeObject: meta.KubeObject{
+				APIVersion: api.APIVersion,
+				Kind:       api.PRFileKind,
+				Metadata: meta.ObjectMeta{
+					Name: gf.Filename,
+				},
 			},
 			Status: api.PRFileStatus{
 				Filename:   gf.Filename,
@@ -593,10 +608,12 @@ func (c *Client) ListReviewComments(ctx context.Context, repo string, number int
 	comments := make([]api.ReviewComment, len(ghComments))
 	for i, gc := range ghComments {
 		comments[i] = api.ReviewComment{
-			APIVersion: api.APIVersion,
-			Kind:       api.ReviewCommentKind,
-			Metadata: api.ObjectMeta{
-				Name: fmt.Sprintf("%s#%d-review-%d", repo, number, gc.ID),
+			KubeObject: meta.KubeObject{
+				APIVersion: api.APIVersion,
+				Kind:       api.ReviewCommentKind,
+				Metadata: meta.ObjectMeta{
+					Name: fmt.Sprintf("%s#%d-review-%d", repo, number, gc.ID),
+				},
 			},
 			Spec: api.ReviewCommentSpec{
 				Body: gc.Body,
