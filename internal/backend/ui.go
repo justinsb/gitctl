@@ -111,6 +111,12 @@ func (s *Server) handlePRDetail(w http.ResponseWriter, r *http.Request, owner, r
 		renderCommentBodies(comments)
 		data.Comments = comments
 
+		reviewComments := fetchCached(r.Context(), s.reviewCommentStore, key, func(ctx context.Context) ([]api.ReviewComment, error) {
+			return s.githubClient.ListReviewComments(ctx, fullRepo, number)
+		})
+		renderReviewCommentBodies(reviewComments)
+		data.ReviewComments = reviewComments
+
 	case "commits":
 		data.Commits = fetchCached(r.Context(), s.commitStore, key, func(ctx context.Context) ([]api.PRCommit, error) {
 			return s.githubClient.ListPRCommits(ctx, fullRepo, number)
@@ -349,11 +355,11 @@ func renderReviewCommentBodies(comments []api.ReviewComment) {
 	}
 }
 
-// filterReviewCommentsForFile returns review comments that belong to the given file path.
+// filterReviewCommentsForFile returns non-outdated review comments that belong to the given file path.
 func filterReviewCommentsForFile(comments []api.ReviewComment, path string) []api.ReviewComment {
 	var result []api.ReviewComment
 	for _, c := range comments {
-		if c.Status.Path == path {
+		if c.Status.Path == path && !c.Status.Outdated {
 			result = append(result, c)
 		}
 	}

@@ -15,3 +15,21 @@
     diffHunk: |
       @@ -0,0 +1,25 @@
       +package auth
+- apiVersion: gitctl.justinsb.com/v1alpha1
+  kind: ReviewComment
+  metadata:
+    name: "testorg/testrepo#42-review-202"
+  spec:
+    body: "This error message should be more descriptive."
+  status:
+    path: "auth/login.go"
+    line: 10
+    side: "RIGHT"
+    author: "carol"
+    htmlUrl: "https://github.com/testorg/testrepo/pull/42#discussion_r202"
+    createdAt: "2026-03-15T14:30:00Z"
+    updatedAt: "2026-03-15T14:30:00Z"
+    outdated: true
+    diffHunk: |
+      @@ -0,0 +1,25 @@
+      +package auth
