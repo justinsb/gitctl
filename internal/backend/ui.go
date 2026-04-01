@@ -109,13 +109,13 @@ func (s *Server) handlePRDetail(w http.ResponseWriter, r *http.Request, owner, r
 			return s.githubClient.ListIssueComments(ctx, fullRepo, number)
 		})
 		renderCommentBodies(comments)
-		data.Comments = comments
 
 		reviewComments := fetchCached(r.Context(), s.reviewCommentStore, key, func(ctx context.Context) ([]api.ReviewComment, error) {
 			return s.githubClient.ListReviewComments(ctx, fullRepo, number)
 		})
 		renderReviewCommentBodies(reviewComments)
-		data.ReviewComments = reviewComments
+
+		data.Timeline = buildTimeline(comments, reviewComments)
 
 	case "commits":
 		data.Commits = fetchCached(r.Context(), s.commitStore, key, func(ctx context.Context) ([]api.PRCommit, error) {

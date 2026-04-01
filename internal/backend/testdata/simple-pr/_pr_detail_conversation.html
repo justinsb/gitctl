@@ -298,44 +298,6 @@ details[open].outdated-comment > .outdated-summary::before { content: "\25BC"; }
 </div>
   <hr>
   
-  <h2>2 comment(s)</h2>
-  
-  <div class="comment">
-    <div class="comment-header">
-      <span class="comment-author">bob</span>
-      <span class="comment-date">2026-03-16</span>
-    </div>
-    <div class="markdown-body"><p>Looks good overall! Just a few minor suggestions.</p>
-<p>Can we add rate limiting to the login endpoint?</p>
-</div>
-  </div>
-  
-  <div class="comment">
-    <div class="comment-header">
-      <span class="comment-author">alice</span>
-      <span class="comment-date">2026-03-16</span>
-    </div>
-    <div class="markdown-body"><p>Good point, I'll add that in the next commit.</p>
-</div>
-  </div>
-  
-  
-
-  
-  <h2>Review comments</h2>
-  
-  
-  <div class="review-comment-conversation">
-    <div class="review-comment-file"><code>auth/login.go</code> line 14</div>
-    <div class="comment">
-      <div class="comment-header">
-        <span class="comment-author">bob</span>
-        <span class="comment-date">2026-03-16</span>
-      </div>
-      <div class="markdown-body"><p>Should we add rate limiting here before calling <code>validateCredentials</code>?</p>
-</div>
-    </div>
-  </div>
   
   
   
@@ -354,6 +316,46 @@ details[open].outdated-comment > .outdated-summary::before { content: "\25BC"; }
 </div>
     </div>
   </details>
+  
+  
+  
+  
+  <div class="comment">
+    <div class="comment-header">
+      <span class="comment-author">bob</span>
+      <span class="comment-date">2026-03-16</span>
+    </div>
+    <div class="markdown-body"><p>Looks good overall! Just a few minor suggestions.</p>
+<p>Can we add rate limiting to the login endpoint?</p>
+</div>
+  </div>
+  
+  
+  
+  
+  <div class="review-comment-conversation">
+    <div class="review-comment-file"><code>auth/login.go</code> line 14</div>
+    <div class="comment">
+      <div class="comment-header">
+        <span class="comment-author">bob</span>
+        <span class="comment-date">2026-03-16</span>
+      </div>
+      <div class="markdown-body"><p>Should we add rate limiting here before calling <code>validateCredentials</code>?</p>
+</div>
+    </div>
+  </div>
+  
+  
+  
+  
+  <div class="comment">
+    <div class="comment-header">
+      <span class="comment-author">alice</span>
+      <span class="comment-date">2026-03-16</span>
+    </div>
+    <div class="markdown-body"><p>Good point, I'll add that in the next commit.</p>
+</div>
+  </div>
   
   
   
