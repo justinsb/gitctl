@@ -2,9 +2,42 @@ package backend
 
 import (
 	"html/template"
+	"sort"
 
 	"github.com/justinsb/gitctl/internal/api"
 )
+
+// TimelineEntry represents a single entry in the PR conversation timeline.
+// It wraps either a Comment or a ReviewComment so they can be sorted by time.
+type TimelineEntry struct {
+	// IsReviewComment is true when this entry wraps a ReviewComment.
+	IsReviewComment bool
+	Comment         api.Comment
+	ReviewComment   api.ReviewComment
+	CreatedAt       string
+}
+
+// buildTimeline merges comments and review comments into a single timeline sorted by CreatedAt.
+func buildTimeline(comments []api.Comment, reviewComments []api.ReviewComment) []TimelineEntry {
+	entries := make([]TimelineEntry, 0, len(comments)+len(reviewComments))
+	for _, c := range comments {
+		entries = append(entries, TimelineEntry{
+			Comment:   c,
+			CreatedAt: c.Status.CreatedAt,
+		})
+	}
+	for _, rc := range reviewComments {
+		entries = append(entries, TimelineEntry{
+			IsReviewComment: true,
+			ReviewComment:   rc,
+			CreatedAt:       rc.Status.CreatedAt,
+		})
+	}
+	sort.SliceStable(entries, func(i, j int) bool {
+		return entries[i].CreatedAt < entries[j].CreatedAt
+	})
+	return entries
+}
 
 // prDetailData holds all data needed to render a PR detail page.
 type prDetailData struct {
@@ -14,6 +47,7 @@ type prDetailData struct {
 	ActiveTab      string
 	PR             *api.PullRequest
 	Comments       []api.Comment
+	Timeline       []TimelineEntry
 	Commits        []api.PRCommit
 	CheckRuns      []api.CheckRun
 	Files          []fileDiffData
@@ -154,52 +188,48 @@ const prDetailTemplateStr = `<!DOCTYPE html>
 <div class="tab-content">
   <div class="markdown-body">{{if .PR.Spec.Body}}{{safeHTML .PR.Spec.Body}}{{else}}<em class="meta">No description provided.</em>{{end}}</div>
   <hr>
-  {{if .Comments}}
-  <h2>{{len .Comments}} comment(s)</h2>
-  {{range .Comments}}
-  <div class="comment">
-    <div class="comment-header">
-      <span class="comment-author">{{.Status.Author}}</span>
-      <span class="comment-date">{{shortDate .Status.CreatedAt}}</span>
-    </div>
-    <div class="markdown-body">{{safeHTML .Spec.Body}}</div>
-  </div>
-  {{end}}
-  {{else}}
-  <p class="meta">No comments yet.</p>
-  {{end}}
-
-  {{if .ReviewComments}}
-  <h2>Review comments</h2>
-  {{range .ReviewComments}}
-  {{if .Status.Outdated}}
+  {{if .Timeline}}
+  {{range .Timeline}}
+  {{if .IsReviewComment}}
+  {{if .ReviewComment.Status.Outdated}}
   <details class="outdated-comment">
     <summary class="outdated-summary">
       <span class="outdated-badge">Outdated</span>
-      <span class="comment-author">{{.Status.Author}}</span> commented on <code>{{.Status.Path}}</code>
-      <span class="comment-date">{{shortDate .Status.CreatedAt}}</span>
+      <span class="comment-author">{{.ReviewComment.Status.Author}}</span> commented on <code>{{.ReviewComment.Status.Path}}</code>
+      <span class="comment-date">{{shortDate .ReviewComment.Status.CreatedAt}}</span>
     </summary>
     <div class="comment">
       <div class="comment-header">
-        <span class="comment-author">{{.Status.Author}}</span>
-        <span class="comment-date">{{shortDate .Status.CreatedAt}}</span>
+        <span class="comment-author">{{.ReviewComment.Status.Author}}</span>
+        <span class="comment-date">{{shortDate .ReviewComment.Status.CreatedAt}}</span>
       </div>
-      <div class="markdown-body">{{safeHTML .Spec.Body}}</div>
+      <div class="markdown-body">{{safeHTML .ReviewComment.Spec.Body}}</div>
     </div>
   </details>
   {{else}}
   <div class="review-comment-conversation">
-    <div class="review-comment-file"><code>{{.Status.Path}}</code>{{if .Status.Line}} line {{.Status.Line}}{{end}}</div>
+    <div class="review-comment-file"><code>{{.ReviewComment.Status.Path}}</code>{{if .ReviewComment.Status.Line}} line {{.ReviewComment.Status.Line}}{{end}}</div>
     <div class="comment">
       <div class="comment-header">
-        <span class="comment-author">{{.Status.Author}}</span>
-        <span class="comment-date">{{shortDate .Status.CreatedAt}}</span>
+        <span class="comment-author">{{.ReviewComment.Status.Author}}</span>
+        <span class="comment-date">{{shortDate .ReviewComment.Status.CreatedAt}}</span>
       </div>
-      <div class="markdown-body">{{safeHTML .Spec.Body}}</div>
+      <div class="markdown-body">{{safeHTML .ReviewComment.Spec.Body}}</div>
     </div>
   </div>
   {{end}}
+  {{else}}
+  <div class="comment">
+    <div class="comment-header">
+      <span class="comment-author">{{.Comment.Status.Author}}</span>
+      <span class="comment-date">{{shortDate .Comment.Status.CreatedAt}}</span>
+    </div>
+    <div class="markdown-body">{{safeHTML .Comment.Spec.Body}}</div>
+  </div>
   {{end}}
+  {{end}}
+  {{else}}
+  <p class="meta">No comments yet.</p>
   {{end}}
 
   <div class="comment-form">
