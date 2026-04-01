@@ -106,13 +106,16 @@ func runPRGoldenTest(t *testing.T, dir string) {
 			buildData: func() prDetailData {
 				c := cloneComments(comments)
 				renderCommentBodies(c)
+				rc := cloneReviewComments(reviewComments)
+				renderReviewCommentBodies(rc)
 				return prDetailData{
-					Owner:     owner,
-					Repo:      repo,
-					Number:    number,
-					ActiveTab: "conversation",
-					PR:        &pr,
-					Comments:  c,
+					Owner:          owner,
+					Repo:           repo,
+					Number:         number,
+					ActiveTab:      "conversation",
+					PR:             &pr,
+					Comments:       c,
+					ReviewComments: rc,
 				}
 			},
 		},

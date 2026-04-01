@@ -350,6 +350,7 @@ type githubReviewComment struct {
 	ID        int        `json:"id"`
 	Body      string     `json:"body"`
 	Path      string     `json:"path"`
+	Position  *int       `json:"position"`
 	Line      int        `json:"line"`
 	Side      string     `json:"side"`
 	HTMLURL   string     `json:"html_url"`
@@ -628,6 +629,7 @@ func (c *Client) ListReviewComments(ctx context.Context, repo string, number int
 				UpdatedAt: gc.UpdatedAt,
 				DiffHunk:  gc.DiffHunk,
 				InReplyTo: gc.InReplyTo,
+				Outdated:  gc.Position == nil,
 			},
 		}
 	}

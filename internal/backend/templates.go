@@ -169,6 +169,39 @@ const prDetailTemplateStr = `<!DOCTYPE html>
   <p class="meta">No comments yet.</p>
   {{end}}
 
+  {{if .ReviewComments}}
+  <h2>Review comments</h2>
+  {{range .ReviewComments}}
+  {{if .Status.Outdated}}
+  <details class="outdated-comment">
+    <summary class="outdated-summary">
+      <span class="outdated-badge">Outdated</span>
+      <span class="comment-author">{{.Status.Author}}</span> commented on <code>{{.Status.Path}}</code>
+      <span class="comment-date">{{shortDate .Status.CreatedAt}}</span>
+    </summary>
+    <div class="comment">
+      <div class="comment-header">
+        <span class="comment-author">{{.Status.Author}}</span>
+        <span class="comment-date">{{shortDate .Status.CreatedAt}}</span>
+      </div>
+      <div class="markdown-body">{{safeHTML .Spec.Body}}</div>
+    </div>
+  </details>
+  {{else}}
+  <div class="review-comment-conversation">
+    <div class="review-comment-file"><code>{{.Status.Path}}</code>{{if .Status.Line}} line {{.Status.Line}}{{end}}</div>
+    <div class="comment">
+      <div class="comment-header">
+        <span class="comment-author">{{.Status.Author}}</span>
+        <span class="comment-date">{{shortDate .Status.CreatedAt}}</span>
+      </div>
+      <div class="markdown-body">{{safeHTML .Spec.Body}}</div>
+    </div>
+  </div>
+  {{end}}
+  {{end}}
+  {{end}}
+
   <div class="comment-form">
     <h3>Add a comment</h3>
     <form method="POST" action="/ui/repos/{{.Owner}}/{{.Repo}}/pulls/{{.Number}}/comments">
@@ -379,6 +412,9 @@ body {
     .diff-remove .diff-line-content { background: rgba(248,81,73,0.1); }
     .diff-hunk-header td { background: rgba(56,132,244,0.15); color: #9198a1; }
     .diff-comment { background: rgba(110,118,129,0.15); border-color: #30363d; }
+    .review-comment-file { color: #9198a1; }
+    .outdated-summary { color: #9198a1; border-color: #30363d; }
+    .outdated-badge { background: rgba(110,118,129,0.3); color: #9198a1; }
     textarea { background: #161b22; color: #e6edf3; border-color: #30363d; }
     input[type="text"], input[type="number"] { background: #161b22; color: #e6edf3; border-color: #30363d; }
     .file-diff { border-color: #30363d; }
@@ -536,6 +572,26 @@ a:hover { text-decoration: underline; }
 }
 .diff-comment .comment-header { padding: 6px 10px; font-size: 12px; }
 .diff-comment .markdown-body { padding: 8px 10px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; }
+
+/* Review comments in conversation view */
+.review-comment-conversation { margin-bottom: 12px; }
+.review-comment-file { font-size: 12px; color: #656d76; margin-bottom: 4px; }
+.review-comment-file code { font-size: 12px; }
+.outdated-comment { margin-bottom: 12px; }
+.outdated-summary {
+    cursor: pointer; padding: 8px 12px; font-size: 13px;
+    color: #656d76; display: flex; gap: 8px; align-items: center;
+    border: 1px solid #d1d9e0; border-radius: 6px;
+    list-style: none;
+}
+.outdated-summary::-webkit-details-marker { display: none; }
+.outdated-summary::before { content: "\25B6"; font-size: 10px; }
+details[open].outdated-comment > .outdated-summary::before { content: "\25BC"; }
+.outdated-badge {
+    font-size: 11px; padding: 1px 7px; border-radius: 12px;
+    background: rgba(175,184,193,0.2); color: #656d76;
+}
+.outdated-comment .comment { margin-top: 8px; }
 
 /* Markdown body styles */
 .markdown-body { word-wrap: break-word; overflow-wrap: break-word; }

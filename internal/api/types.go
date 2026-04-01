@@ -302,6 +302,7 @@ type ReviewCommentStatus struct {
 	UpdatedAt string `json:"updatedAt,omitempty"`
 	DiffHunk  string `json:"diffHunk,omitempty"`
 	InReplyTo int    `json:"inReplyTo,omitempty"`
+	Outdated  bool   `json:"outdated,omitempty"`
 }
 
 // ReviewComment represents a file-level review comment on a pull request.
