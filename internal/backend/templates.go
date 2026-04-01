@@ -101,6 +101,13 @@ var templateFuncMap = template.FuncMap{
 	"safeHTML": func(s string) template.HTML {
 		return template.HTML(s)
 	},
+	"parseDiffHunk": func(hunk string) []DiffLine {
+		hunks := parsePatch(hunk)
+		if len(hunks) == 0 {
+			return nil
+		}
+		return hunks[0].Lines
+	},
 	"checkIcon": func(status, conclusion string) string {
 		if status != "completed" {
 			return "⏳"
@@ -198,6 +205,19 @@ const prDetailTemplateStr = `<!DOCTYPE html>
       <span class="comment-author">{{.ReviewComment.Status.Author}}</span> commented on <code>{{.ReviewComment.Status.Path}}</code>
       <span class="comment-date">{{shortDate .ReviewComment.Status.CreatedAt}}</span>
     </summary>
+    {{if .ReviewComment.Status.DiffHunk}}
+    <div class="review-comment-snippet">
+      <table class="diff-table">
+      {{range parseDiffHunk .ReviewComment.Status.DiffHunk}}
+      <tr class="diff-line diff-{{.Type}}">
+        <td class="diff-line-num">{{if .OldLine}}{{.OldLine}}{{end}}</td>
+        <td class="diff-line-num">{{if .NewLine}}{{.NewLine}}{{end}}</td>
+        <td class="diff-line-content"><pre>{{.Content}}</pre></td>
+      </tr>
+      {{end}}
+      </table>
+    </div>
+    {{end}}
     <div class="comment">
       <div class="comment-header">
         <span class="comment-author">{{.ReviewComment.Status.Author}}</span>
@@ -209,6 +229,19 @@ const prDetailTemplateStr = `<!DOCTYPE html>
   {{else}}
   <div class="review-comment-conversation">
     <div class="review-comment-file"><code>{{.ReviewComment.Status.Path}}</code>{{if .ReviewComment.Status.Line}} line {{.ReviewComment.Status.Line}}{{end}}</div>
+    {{if .ReviewComment.Status.DiffHunk}}
+    <div class="review-comment-snippet">
+      <table class="diff-table">
+      {{range parseDiffHunk .ReviewComment.Status.DiffHunk}}
+      <tr class="diff-line diff-{{.Type}}">
+        <td class="diff-line-num">{{if .OldLine}}{{.OldLine}}{{end}}</td>
+        <td class="diff-line-num">{{if .NewLine}}{{.NewLine}}{{end}}</td>
+        <td class="diff-line-content"><pre>{{.Content}}</pre></td>
+      </tr>
+      {{end}}
+      </table>
+    </div>
+    {{end}}
     <div class="comment">
       <div class="comment-header">
         <span class="comment-author">{{.ReviewComment.Status.Author}}</span>
@@ -443,6 +476,7 @@ body {
     .diff-hunk-header td { background: rgba(56,132,244,0.15); color: #9198a1; }
     .diff-comment { background: rgba(110,118,129,0.15); border-color: #30363d; }
     .review-comment-file { color: #9198a1; }
+    .review-comment-snippet { border-color: #30363d; }
     .outdated-summary { color: #9198a1; border-color: #30363d; }
     .outdated-badge { background: rgba(110,118,129,0.3); color: #9198a1; }
     textarea { background: #161b22; color: #e6edf3; border-color: #30363d; }
@@ -607,6 +641,12 @@ a:hover { text-decoration: underline; }
 .review-comment-conversation { margin-bottom: 12px; }
 .review-comment-file { font-size: 12px; color: #656d76; margin-bottom: 4px; }
 .review-comment-file code { font-size: 12px; }
+.review-comment-snippet {
+    border: 1px solid #d1d9e0; border-radius: 6px 6px 0 0;
+    overflow: hidden; margin-top: 4px;
+}
+.review-comment-snippet + .comment { border-top: 0; border-radius: 0 0 8px 8px; }
+.review-comment-snippet .diff-table { margin: 0; }
 .outdated-comment { margin-bottom: 12px; }
 .outdated-summary {
     cursor: pointer; padding: 8px 12px; font-size: 13px;
