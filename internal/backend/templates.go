@@ -163,6 +163,7 @@ const prDetailTemplateStr = `<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <style>` + pageCSS + `</style>
 </head>
 <body>
@@ -385,6 +386,7 @@ const issueDetailTemplateStr = `<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <style>` + pageCSS + `</style>
 </head>
 <body>
@@ -483,6 +485,15 @@ body {
     input[type="text"], input[type="number"] { background: #161b22; color: #e6edf3; border-color: #30363d; }
     .file-diff { border-color: #30363d; }
     .files-summary { border-color: #30363d; }
+    .loading { color: #9198a1; }
+    .comment-date { color: #9198a1; }
+    .commit-meta { color: #9198a1; }
+    .check-conclusion { color: #9198a1; }
+    .file-modified { color: #d29922; background: rgba(210,153,34,0.15); }
+    .state-open { color: #3fb950; }
+    .state-closed { color: #f85149; }
+    .comment-form button { background: #238636; }
+    .comment-form button:hover { background: #2ea043; }
 }
 h1 { font-size: 1.5em; font-weight: 600; margin: 8px 0; }
 h2 { font-size: 1.2em; font-weight: 600; margin: 16px 0 8px 0; }

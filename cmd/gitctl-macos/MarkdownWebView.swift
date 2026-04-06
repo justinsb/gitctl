@@ -20,6 +20,7 @@ struct DetailWebView: NSViewRepresentable {
     func makeNSView(context: Context) -> WKWebView {
         let webView = WKWebView(frame: .zero)
         webView.navigationDelegate = context.coordinator
+        webView.underPageBackgroundColor = .windowBackgroundColor
         webView.load(URLRequest(url: url))
         context.coordinator.currentURL = url
         return webView
