@@ -1,17 +1,37 @@
 import SwiftUI
 
-enum SidebarItem: String, CaseIterable, Identifiable {
-    case feed = "Feed"
-    case assigned = "Assigned"
-    case repos = "Repositories"
+// MARK: - Sidebar Selection
 
-    var id: String { rawValue }
+enum SidebarSelection: Identifiable, Hashable {
+    case feed
+    case assigned
+    case repos
+    case view(View)
+
+    var id: String {
+        switch self {
+        case .feed: return "feed"
+        case .assigned: return "assigned"
+        case .repos: return "repos"
+        case .view(let v): return "view-\(v.id)"
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .feed: return "Feed"
+        case .assigned: return "Assigned"
+        case .repos: return "Repositories"
+        case .view(let v): return v.spec?.displayName ?? v.metadata?.name ?? "Untitled"
+        }
+    }
 
     var systemImage: String {
         switch self {
         case .feed: return "arrow.up.circle"
         case .assigned: return "person.circle"
         case .repos: return "folder"
+        case .view: return "magnifyingglass"
         }
     }
 }
@@ -38,11 +58,15 @@ enum SelectableItem: Identifiable, Hashable {
     }
 }
 
-struct ContentView: View {
-    @State private var sidebarSelection: SidebarItem? = .feed
+struct ContentView: SwiftUI.View {
+    @State private var sidebarSelection: SidebarSelection? = .feed
     @State private var selectedItem: SelectableItem?
+    @State private var views: [View] = []
+    @State private var showCreateView = false
 
-    var body: some View {
+    private let client = GitCtlClient()
+
+    var body: some SwiftUI.View {
         if let selected = selectedItem {
             // Full-screen detail view
             Group {
@@ -65,13 +89,55 @@ struct ContentView: View {
             // List view with sidebar
             NavigationSplitView {
                 List(selection: $sidebarSelection) {
-                    ForEach(SidebarItem.allCases) { item in
-                        NavigationLink(value: item) {
-                            Label(item.rawValue, systemImage: item.systemImage)
+                    Section("Navigation") {
+                        NavigationLink(value: SidebarSelection.feed) {
+                            Label("Feed", systemImage: "arrow.up.circle")
+                        }
+                        NavigationLink(value: SidebarSelection.assigned) {
+                            Label("Assigned", systemImage: "person.circle")
+                        }
+                        NavigationLink(value: SidebarSelection.repos) {
+                            Label("Repositories", systemImage: "folder")
+                        }
+                    }
+                    Section("Views") {
+                        ForEach(views) { view in
+                            NavigationLink(value: SidebarSelection.view(view)) {
+                                Label(view.spec?.displayName ?? view.metadata?.name ?? "Untitled",
+                                      systemImage: "magnifyingglass")
+                            }
+                            .contextMenu {
+                                Button(role: .destructive) {
+                                    Task { await deleteView(name: view.metadata?.name ?? "") }
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
                         }
                     }
                 }
                 .navigationTitle("gitctl")
+                .toolbar {
+                    ToolbarItem(placement: .automatic) {
+                        Button(action: { showCreateView = true }) {
+                            Image(systemName: "plus")
+                        }
+                        .help("Add View")
+                    }
+                }
+                .sheet(isPresented: $showCreateView) {
+                    CreateViewSheet { newView in
+                        Task {
+                            do {
+                                _ = try await client.createView(view: newView)
+                                await loadViews()
+                            } catch {
+                                // TODO: show error
+                            }
+                        }
+                    }
+                }
+                .task { await loadViews() }
             } detail: {
                 switch sidebarSelection {
                 case .feed:
@@ -80,6 +146,8 @@ struct ContentView: View {
                     AssignedListView(selectedItem: $selectedItem)
                 case .repos:
                     ReposView()
+                case .view(let view):
+                    ViewResultsListView(view: view, selectedItem: $selectedItem)
                 case nil:
                     Text("Select a section")
                         .foregroundStyle(.secondary)
@@ -87,11 +155,171 @@ struct ContentView: View {
             }
         }
     }
+
+    func loadViews() async {
+        do {
+            views = try await client.listViews()
+        } catch {
+            // Silently handle — views section will be empty
+        }
+    }
+
+    func deleteView(name: String) async {
+        do {
+            try await client.deleteView(name: name)
+            await loadViews()
+            // If the deleted view was selected, clear selection
+            if case .view(let v) = sidebarSelection, v.metadata?.name == name {
+                sidebarSelection = .feed
+            }
+        } catch {
+            // TODO: show error
+        }
+    }
+}
+
+// MARK: - Create View Sheet
+
+struct CreateViewSheet: SwiftUI.View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var displayName = ""
+    @State private var query = ""
+
+    let onCreate: (View) -> Void
+
+    var body: some SwiftUI.View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("New View")
+                .font(.headline)
+
+            TextField("Display Name", text: $displayName)
+                .textFieldStyle(.roundedBorder)
+
+            TextField("Query (e.g. is:pr is:open repo:org/repo author:@me)", text: $query)
+                .textFieldStyle(.roundedBorder)
+
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Create") {
+                    let name = displayName.lowercased()
+                        .replacingOccurrences(of: " ", with: "-")
+                        .filter { $0.isLetter || $0.isNumber || $0 == "-" }
+                    let view = View(
+                        apiVersion: "gitctl.justinsb.com/v1alpha1",
+                        kind: "View",
+                        metadata: ObjectMeta(name: name),
+                        spec: ViewSpec(query: query, displayName: displayName)
+                    )
+                    onCreate(view)
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(displayName.isEmpty || query.isEmpty)
+            }
+        }
+        .padding()
+        .frame(minWidth: 400)
+    }
+}
+
+// MARK: - View Results List View
+
+struct ViewResultsListView: SwiftUI.View {
+    let view: View
+    @Binding var selectedItem: SelectableItem?
+    @State private var prs: [PullRequest] = []
+    @State private var issues: [Issue] = []
+    @State private var isLoading = true
+    @State private var errorMessage: String?
+    @State private var searchText = ""
+
+    private let client = GitCtlClient()
+
+    var filteredPRs: [PullRequest] {
+        if searchText.isEmpty { return prs }
+        return prs.filter { pr in
+            let title = pr.spec?.title ?? ""
+            let repo = pr.status?.repo ?? ""
+            return title.localizedCaseInsensitiveContains(searchText)
+                || repo.localizedCaseInsensitiveContains(searchText)
+        }
+    }
+
+    var filteredIssues: [Issue] {
+        if searchText.isEmpty { return issues }
+        return issues.filter { issue in
+            let title = issue.spec?.title ?? ""
+            let repo = issue.status?.repo ?? ""
+            return title.localizedCaseInsensitiveContains(searchText)
+                || repo.localizedCaseInsensitiveContains(searchText)
+        }
+    }
+
+    var body: some SwiftUI.View {
+        Group {
+            if isLoading {
+                ProgressView("Running query...")
+            } else if let error = errorMessage {
+                ErrorView(message: error) { Task { await load() } }
+            } else {
+                List(selection: $selectedItem) {
+                    if !filteredPRs.isEmpty {
+                        Section("Pull Requests (\(filteredPRs.count))") {
+                            ForEach(filteredPRs) { pr in
+                                PRRow(pr: pr)
+                                    .tag(SelectableItem.pullRequest(pr))
+                            }
+                        }
+                    }
+                    if !filteredIssues.isEmpty {
+                        Section("Issues (\(filteredIssues.count))") {
+                            ForEach(filteredIssues) { issue in
+                                IssueRow(issue: issue)
+                                    .tag(SelectableItem.issue(issue))
+                            }
+                        }
+                    }
+                    if filteredPRs.isEmpty && filteredIssues.isEmpty {
+                        Text("No results")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .navigationTitle(view.spec?.displayName ?? "View")
+        .searchable(text: $searchText, prompt: "Filter results")
+        .toolbar {
+            ToolbarItem(placement: .automatic) {
+                Button(action: { Task { await load() } }) {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .help("Refresh")
+            }
+        }
+        .task { await load() }
+        .id(view.id) // force reload when switching views
+    }
+
+    func load() async {
+        isLoading = true
+        errorMessage = nil
+        do {
+            let results = try await client.executeView(name: view.metadata?.name ?? "")
+            prs = results.pullRequests ?? []
+            issues = results.issues ?? []
+            isLoading = false
+        } catch {
+            errorMessage = "Failed to execute view: \(error.localizedDescription)\n\nMake sure the backend is running:\n  go run cmd/gitctl-backend/main.go"
+            isLoading = false
+        }
+    }
 }
 
 // MARK: - Feed List View (Outbound PRs)
 
-struct FeedListView: View {
+struct FeedListView: SwiftUI.View {
     @Binding var selectedItem: SelectableItem?
     @State private var prs: [PullRequest] = []
     @State private var isLoading = true
@@ -111,7 +339,7 @@ struct FeedListView: View {
         }
     }
 
-    var body: some View {
+    var body: some SwiftUI.View {
         Group {
             if isLoading {
                 ProgressView("Loading feed...")
@@ -154,7 +382,7 @@ struct FeedListView: View {
 
 // MARK: - Assigned List View (PRs + Issues assigned to me)
 
-struct AssignedListView: View {
+struct AssignedListView: SwiftUI.View {
     @Binding var selectedItem: SelectableItem?
     @State private var prs: [PullRequest] = []
     @State private var issues: [Issue] = []
@@ -185,7 +413,7 @@ struct AssignedListView: View {
         }
     }
 
-    var body: some View {
+    var body: some SwiftUI.View {
         Group {
             if isLoading {
                 ProgressView("Loading assigned items...")
@@ -247,7 +475,7 @@ struct AssignedListView: View {
 
 // MARK: - Repos View
 
-struct ReposView: View {
+struct ReposView: SwiftUI.View {
     @State private var repos: [GitRepo] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
@@ -266,7 +494,7 @@ struct ReposView: View {
         }
     }
 
-    var body: some View {
+    var body: some SwiftUI.View {
         Group {
             if isLoading {
                 ProgressView("Loading repositories...")
@@ -306,7 +534,7 @@ struct ReposView: View {
 
 // MARK: - Detail Views
 
-struct PRDetailView: View {
+struct PRDetailView: SwiftUI.View {
     let pr: PullRequest
 
     private var detailURL: URL {
@@ -316,13 +544,13 @@ struct PRDetailView: View {
         return URL(string: "http://localhost:8484/ui/repos/\(repo)/pulls/\(number)")!
     }
 
-    var body: some View {
+    var body: some SwiftUI.View {
         DetailWebView(url: detailURL)
             .navigationTitle("\(pr.status?.repo ?? "")#\(pr.status?.number ?? 0)")
     }
 }
 
-struct IssueDetailView: View {
+struct IssueDetailView: SwiftUI.View {
     let issue: Issue
 
     private var detailURL: URL {
@@ -331,7 +559,7 @@ struct IssueDetailView: View {
         return URL(string: "http://localhost:8484/ui/repos/\(repo)/issues/\(number)")!
     }
 
-    var body: some View {
+    var body: some SwiftUI.View {
         DetailWebView(url: detailURL)
             .navigationTitle("\(issue.status?.repo ?? "")#\(issue.status?.number ?? 0)")
     }
@@ -339,10 +567,10 @@ struct IssueDetailView: View {
 
 // MARK: - Row Views
 
-struct PRRow: View {
+struct PRRow: SwiftUI.View {
     let pr: PullRequest
 
-    var body: some View {
+    var body: some SwiftUI.View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text("\(pr.status?.repo ?? "")#\(pr.status?.number ?? 0)")
@@ -396,10 +624,10 @@ struct PRRow: View {
     }
 }
 
-struct IssueRow: View {
+struct IssueRow: SwiftUI.View {
     let issue: Issue
 
-    var body: some View {
+    var body: some SwiftUI.View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text("\(issue.status?.repo ?? "")#\(issue.status?.number ?? 0)")
@@ -437,10 +665,10 @@ struct IssueRow: View {
     }
 }
 
-struct RepoRow: View {
+struct RepoRow: SwiftUI.View {
     let repo: GitRepo
 
-    var body: some View {
+    var body: some SwiftUI.View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(repo.metadata?.name ?? "unknown")
@@ -477,11 +705,11 @@ struct RepoRow: View {
 
 // MARK: - Shared Components
 
-struct ErrorView: View {
+struct ErrorView: SwiftUI.View {
     let message: String
     let retry: () -> Void
 
-    var body: some View {
+    var body: some SwiftUI.View {
         VStack(spacing: 12) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.largeTitle)

@@ -1,4 +1,4 @@
-.PHONY: build clean run-backend run-frontend run-macos build-ipad run-ipad test
+.PHONY: build clean run-backend run-frontend build-macos run-macos install-macos build-ipad run-ipad test
 
 # Default target
 all: build
@@ -28,18 +28,28 @@ run-frontend:
 	@echo "Starting frontend TUI..."
 	@go run cmd/gitctl/main.go
 
-# Build macOS app bundle
+# Build macOS app bundle (includes Go backend)
 build-macos:
+	@echo "Building Go backend..."
+	@go build -o bin/gitctl-backend ./cmd/gitctl-backend
 	@echo "Building macOS app..."
 	@cd cmd/gitctl-macos && swift build
 	@mkdir -p bin/GitCtl.app/Contents/MacOS
 	@cp cmd/gitctl-macos/.build/debug/GitCtl bin/GitCtl.app/Contents/MacOS/
+	@cp bin/gitctl-backend bin/GitCtl.app/Contents/MacOS/
 	@cp cmd/gitctl-macos/Info.plist bin/GitCtl.app/Contents/
 	@echo "Built bin/GitCtl.app"
 
 # Build and run macOS native app
 run-macos: build-macos
 	@open bin/GitCtl.app
+
+# Install macOS app to /Applications
+install-macos: build-macos
+	@echo "Installing to /Applications..."
+	@rm -rf /Applications/GitCtl.app
+	@cp -R bin/GitCtl.app /Applications/
+	@echo "Installed /Applications/GitCtl.app"
 
 IPAD_SIMULATOR ?= iPad Pro 11-inch (M4)
 IPAD_DERIVED_DATA = bin/DerivedData-ipad

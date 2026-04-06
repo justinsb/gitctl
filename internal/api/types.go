@@ -41,6 +41,10 @@ const (
 	ReviewCommentKind = "ReviewComment"
 	// ReviewCommentListKind is the Kind name for a list of ReviewComment resources.
 	ReviewCommentListKind = "ReviewCommentList"
+	// ViewKind is the Kind name for a single View resource.
+	ViewKind = "View"
+	// ViewListKind is the Kind name for a list of View resources.
+	ViewListKind = "ViewList"
 	// APIVersion is the combined apiVersion field value.
 	APIVersion = Group + "/" + Version
 )
@@ -316,4 +320,35 @@ type ReviewComment struct {
 type ReviewCommentList struct {
 	meta.KubeList `json:",inline"`
 	Items         []ReviewComment `json:"items"`
+}
+
+// ViewSpec contains user-specified fields for a saved search view.
+type ViewSpec struct {
+	// Query is the GitHub search syntax query string (e.g. "is:pr is:open repo:org/repo").
+	Query string `json:"query,omitempty"`
+	// DisplayName is a human-friendly name for the view.
+	DisplayName string `json:"displayName,omitempty"`
+}
+
+// ViewStatus contains observed fields for a view (currently unused).
+type ViewStatus struct{}
+
+// View represents a saved GitHub search query as a Kubernetes-style CRD resource.
+type View struct {
+	meta.KubeObject `json:",inline"`
+	Spec            ViewSpec   `json:"spec,omitempty"`
+	Status          ViewStatus `json:"status,omitempty"`
+}
+
+// ViewList is a list of View resources.
+type ViewList struct {
+	meta.KubeList `json:",inline"`
+	Items         []View `json:"items"`
+}
+
+// ViewResults contains the results of executing a view's query.
+type ViewResults struct {
+	meta.KubeObject `json:",inline"`
+	PullRequests    []PullRequest `json:"pullRequests"`
+	Issues          []Issue       `json:"issues"`
 }

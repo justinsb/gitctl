@@ -28,6 +28,7 @@ type Server struct {
 	checkRunStore       *storage.ResourceStore[api.CheckRun]
 	prFileStore         *storage.ResourceStore[api.PRFile]
 	reviewCommentStore  *storage.ResourceStore[api.ReviewComment]
+	viewStore           *storage.CRUDStore[api.View]
 	githubClient        *github.Client
 	mux                 *http.ServeMux
 }
@@ -42,6 +43,7 @@ func NewServer(
 	checkRunStore *storage.ResourceStore[api.CheckRun],
 	prFileStore *storage.ResourceStore[api.PRFile],
 	reviewCommentStore *storage.ResourceStore[api.ReviewComment],
+	viewStore *storage.CRUDStore[api.View],
 	githubClient *github.Client,
 ) *Server {
 	s := &Server{
@@ -53,6 +55,7 @@ func NewServer(
 		checkRunStore:      checkRunStore,
 		prFileStore:        prFileStore,
 		reviewCommentStore: reviewCommentStore,
+		viewStore:          viewStore,
 		githubClient:       githubClient,
 		mux:                http.NewServeMux(),
 	}
@@ -62,6 +65,8 @@ func NewServer(
 	s.mux.HandleFunc(base+"/pullrequests", s.handleListPullRequests)
 	s.mux.HandleFunc(base+"/issues", s.handleListIssues)
 	s.mux.HandleFunc(base+"/comments", s.handleListComments)
+	s.mux.HandleFunc(base+"/views", s.handleViews)
+	s.mux.HandleFunc(base+"/views/", s.handleViewByName)
 
 	s.registerUIRoutes()
 
@@ -333,4 +338,162 @@ func renderCommentBodies(comments []api.Comment) {
 			comments[i].Spec.Body = renderMarkdown(comments[i].Spec.Body)
 		}
 	}
+}
+
+// handleViews handles GET (list) and POST (create) on /apis/.../views.
+func (s *Server) handleViews(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		views, err := s.viewStore.List(r.Context())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		list := api.ViewList{
+			KubeList: meta.KubeList{
+				APIVersion: api.APIVersion,
+				Kind:       api.ViewListKind,
+			},
+			Items: views,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(list)
+
+	case http.MethodPost:
+		var view api.View
+		if err := json.NewDecoder(r.Body).Decode(&view); err != nil {
+			http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		if view.Metadata.Name == "" {
+			http.Error(w, "metadata.name is required", http.StatusBadRequest)
+			return
+		}
+		view.APIVersion = api.APIVersion
+		view.Kind = api.ViewKind
+		if err := s.viewStore.Create(r.Context(), view); err != nil {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(view)
+
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// handleViewByName handles GET/PUT/DELETE on /apis/.../views/{name}
+// and GET on /apis/.../views/{name}/results.
+func (s *Server) handleViewByName(w http.ResponseWriter, r *http.Request) {
+	base := "/apis/" + api.Group + "/" + api.Version + "/views/"
+	remainder := strings.TrimPrefix(r.URL.Path, base)
+
+	// Check for /results suffix
+	if name, ok := strings.CutSuffix(remainder, "/results"); ok {
+		s.handleViewResults(w, r, name)
+		return
+	}
+
+	name := remainder
+
+	switch r.Method {
+	case http.MethodGet:
+		view, found, err := s.viewStore.Get(r.Context(), name)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if !found {
+			http.Error(w, "view not found", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(view)
+
+	case http.MethodPut:
+		var view api.View
+		if err := json.NewDecoder(r.Body).Decode(&view); err != nil {
+			http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		view.Metadata.Name = name
+		view.APIVersion = api.APIVersion
+		view.Kind = api.ViewKind
+		if err := s.viewStore.Update(r.Context(), view); err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(view)
+
+	case http.MethodDelete:
+		if err := s.viewStore.Delete(r.Context(), name); err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// handleViewResults executes a view's query against GitHub and returns results.
+func (s *Server) handleViewResults(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	view, found, err := s.viewStore.Get(r.Context(), name)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		http.Error(w, "view not found", http.StatusNotFound)
+		return
+	}
+
+	query := view.Spec.Query
+
+	// Resolve @me to the authenticated GitHub user.
+	if strings.Contains(query, "@me") {
+		username, err := s.githubClient.GetAuthenticatedUser(r.Context())
+		if err != nil {
+			http.Error(w, "failed to resolve @me: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		query = strings.ReplaceAll(query, "@me", username)
+	}
+
+	log.Printf("Executing view %q with query: %s", name, query)
+
+	prs, issues, err := s.githubClient.SearchQuery(r.Context(), query)
+	if err != nil {
+		log.Printf("Error executing view query: %v", err)
+		http.Error(w, "search failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("View %q returned %d PRs and %d issues", name, len(prs), len(issues))
+
+	results := api.ViewResults{
+		KubeObject: meta.KubeObject{
+			APIVersion: api.APIVersion,
+			Kind:       "ViewResults",
+		},
+		PullRequests: prs,
+		Issues:       issues,
+	}
+
+	if wantsHTML(r) {
+		renderPRBodies(results.PullRequests)
+		renderIssueBodies(results.Issues)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(results)
 }

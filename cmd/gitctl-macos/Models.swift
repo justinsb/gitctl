@@ -118,6 +118,39 @@ struct IssueList: Codable {
     var items: [Issue]
 }
 
+// MARK: - View
+
+struct ViewSpec: Codable, Hashable {
+    var query: String?
+    var displayName: String?
+}
+
+struct ViewStatus: Codable, Hashable {}
+
+struct View: Codable, Identifiable, Hashable {
+    var apiVersion: String?
+    var kind: String?
+    var metadata: ObjectMeta?
+    var spec: ViewSpec?
+    var status: ViewStatus?
+
+    var id: String { metadata?.name ?? UUID().uuidString }
+}
+
+struct ViewList: Codable {
+    var apiVersion: String?
+    var kind: String?
+    var metadata: ListMeta?
+    var items: [View]
+}
+
+struct ViewResults: Codable {
+    var apiVersion: String?
+    var kind: String?
+    var pullRequests: [PullRequest]?
+    var issues: [Issue]?
+}
+
 // MARK: - Comment
 
 struct CommentSpec: Codable {

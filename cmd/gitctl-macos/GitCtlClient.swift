@@ -67,6 +67,67 @@ class GitCtlClient {
         return issueList.items
     }
 
+    // MARK: - Views
+
+    func listViews() async throws -> [View] {
+        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
+        components.path = "/apis/gitctl.justinsb.com/v1alpha1/views"
+
+        let (data, response) = try await URLSession.shared.data(from: components.url!)
+
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw GitCtlError.badResponse
+        }
+
+        let viewList = try JSONDecoder().decode(ViewList.self, from: data)
+        return viewList.items
+    }
+
+    func createView(view: View) async throws -> View {
+        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
+        components.path = "/apis/gitctl.justinsb.com/v1alpha1/views"
+
+        var request = URLRequest(url: components.url!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(view)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 201 else {
+            throw GitCtlError.badResponse
+        }
+
+        return try JSONDecoder().decode(View.self, from: data)
+    }
+
+    func deleteView(name: String) async throws {
+        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
+        components.path = "/apis/gitctl.justinsb.com/v1alpha1/views/\(name)"
+
+        var request = URLRequest(url: components.url!)
+        request.httpMethod = "DELETE"
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 204 else {
+            throw GitCtlError.badResponse
+        }
+    }
+
+    func executeView(name: String) async throws -> ViewResults {
+        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
+        components.path = "/apis/gitctl.justinsb.com/v1alpha1/views/\(name)/results"
+
+        let (data, response) = try await URLSession.shared.data(for: htmlRequest(url: components.url!))
+
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw GitCtlError.badResponse
+        }
+
+        return try JSONDecoder().decode(ViewResults.self, from: data)
+    }
+
 }
 
 enum GitCtlError: LocalizedError {

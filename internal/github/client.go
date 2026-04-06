@@ -16,9 +16,10 @@ import (
 
 // Client is a GitHub API client
 type Client struct {
-	httpClient *http.Client
-	baseURL    string
-	token      string
+	httpClient     *http.Client
+	baseURL        string
+	token          string
+	cachedUsername string
 }
 
 // NewClient creates a new GitHub API client.
@@ -38,6 +39,70 @@ func (c *Client) setAuthHeader(req *http.Request) {
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
+}
+
+// githubUser is used for the /user endpoint response as well.
+type githubAuthUser struct {
+	Login string `json:"login"`
+}
+
+// GetAuthenticatedUser returns the login of the authenticated user.
+// The result is cached for the lifetime of the client.
+func (c *Client) GetAuthenticatedUser(ctx context.Context) (string, error) {
+	if c.cachedUsername != "" {
+		return c.cachedUsername, nil
+	}
+	if c.token == "" {
+		return "", fmt.Errorf("GITHUB_TOKEN is not set; cannot resolve @me")
+	}
+
+	u := c.baseURL + "/user"
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	c.setAuthHeader(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch authenticated user: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("GitHub API returned status %d for /user", resp.StatusCode)
+	}
+
+	var user githubAuthUser
+	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
+		return "", fmt.Errorf("failed to decode user response: %w", err)
+	}
+
+	c.cachedUsername = user.Login
+	return c.cachedUsername, nil
+}
+
+// SearchQuery runs an arbitrary GitHub search query and returns the results
+// split into pull requests and issues.
+func (c *Client) SearchQuery(ctx context.Context, query string) ([]api.PullRequest, []api.Issue, error) {
+	items, err := c.searchIssues(ctx, query)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var prItems, issueItems []githubSearchItem
+	for _, item := range items {
+		if item.PullRequest != nil {
+			prItems = append(prItems, item)
+		} else {
+			issueItems = append(issueItems, item)
+		}
+	}
+
+	prs := convertToPullRequests(prItems)
+	issues := convertToIssues(issueItems)
+	return prs, issues, nil
 }
 
 // githubRepo represents a repository from the GitHub API

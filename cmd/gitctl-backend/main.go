@@ -55,6 +55,7 @@ func main() {
 	checkRunStore := storage.NewResourceStore[api.CheckRun]()
 	prFileStore := storage.NewResourceStore[api.PRFile]()
 	reviewCommentStore := storage.NewResourceStore[api.ReviewComment]()
+	viewStore := storage.NewCRUDStore[api.View](func(v api.View) string { return v.Metadata.Name })
 
 	githubClient := github.NewClient()
 
@@ -72,7 +73,7 @@ func main() {
 	go issueCtrl.Run(ctx)
 
 	// Create the API handler that reads from storage.
-	handler := backend.NewServer(repoStore, prStore, issueStore, commentStore, commitStore, checkRunStore, prFileStore, reviewCommentStore, githubClient)
+	handler := backend.NewServer(repoStore, prStore, issueStore, commentStore, commitStore, checkRunStore, prFileStore, reviewCommentStore, viewStore, githubClient)
 
 	// Start Unix socket server.
 	unixServer := &http.Server{Handler: handler}
