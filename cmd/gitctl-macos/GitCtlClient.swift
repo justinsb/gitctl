@@ -101,6 +101,25 @@ class GitCtlClient {
         return try JSONDecoder().decode(View.self, from: data)
     }
 
+    func updateView(view: View) async throws -> View {
+        let name = view.metadata?.name ?? ""
+        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
+        components.path = "/apis/gitctl.justinsb.com/v1alpha1/views/\(name)"
+
+        var request = URLRequest(url: components.url!)
+        request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(view)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw GitCtlError.badResponse
+        }
+
+        return try JSONDecoder().decode(View.self, from: data)
+    }
+
     func deleteView(name: String) async throws {
         var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
         components.path = "/apis/gitctl.justinsb.com/v1alpha1/views/\(name)"
