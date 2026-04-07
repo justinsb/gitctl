@@ -63,6 +63,7 @@ struct ContentView: SwiftUI.View {
     @State private var selectedItem: SelectableItem?
     @State private var views: [View] = []
     @State private var showCreateView = false
+    @State private var viewToEdit: View? = nil
 
     private let client = GitCtlClient()
 
@@ -107,6 +108,11 @@ struct ContentView: SwiftUI.View {
                                       systemImage: "magnifyingglass")
                             }
                             .contextMenu {
+                                Button {
+                                    viewToEdit = view
+                                } label: {
+                                    Label("Edit", systemImage: "pencil")
+                                }
                                 Button(role: .destructive) {
                                     Task { await deleteView(name: view.metadata?.name ?? "") }
                                 } label: {
@@ -131,6 +137,22 @@ struct ContentView: SwiftUI.View {
                             do {
                                 _ = try await client.createView(view: newView)
                                 await loadViews()
+                            } catch {
+                                // TODO: show error
+                            }
+                        }
+                    }
+                }
+                .sheet(item: $viewToEdit) { view in
+                    EditViewSheet(view: view) { updatedView in
+                        Task {
+                            do {
+                                _ = try await client.updateView(view: updatedView)
+                                await loadViews()
+                                // Update sidebar selection if the edited view is selected
+                                if case .view(let v) = sidebarSelection, v.metadata?.name == updatedView.metadata?.name {
+                                    sidebarSelection = .view(updatedView)
+                                }
                             } catch {
                                 // TODO: show error
                             }
@@ -213,6 +235,53 @@ struct CreateViewSheet: SwiftUI.View {
                         spec: ViewSpec(query: query, displayName: displayName)
                     )
                     onCreate(view)
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(displayName.isEmpty || query.isEmpty)
+            }
+        }
+        .padding()
+        .frame(minWidth: 400)
+    }
+}
+
+// MARK: - Edit View Sheet
+
+struct EditViewSheet: SwiftUI.View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var displayName: String
+    @State private var query: String
+
+    let view: View
+    let onSave: (View) -> Void
+
+    init(view: View, onSave: @escaping (View) -> Void) {
+        self.view = view
+        self.onSave = onSave
+        _displayName = State(initialValue: view.spec?.displayName ?? "")
+        _query = State(initialValue: view.spec?.query ?? "")
+    }
+
+    var body: some SwiftUI.View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Edit View")
+                .font(.headline)
+
+            TextField("Display Name", text: $displayName)
+                .textFieldStyle(.roundedBorder)
+
+            TextField("Query (e.g. is:pr is:open repo:org/repo author:@me)", text: $query)
+                .textFieldStyle(.roundedBorder)
+
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Save") {
+                    var updated = view
+                    updated.spec = ViewSpec(query: query, displayName: displayName)
+                    onSave(updated)
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
