@@ -7,8 +7,8 @@ import (
 	"sync"
 )
 
-// CRUDStoreIface is the interface implemented by both CRUDStore and PersistentCRUDStore.
-type CRUDStoreIface[T any] interface {
+// Storage is the interface implemented by both CRUDStore and FileStorage.
+type Storage[T any] interface {
 	List(ctx context.Context) ([]T, error)
 	Get(ctx context.Context, name string) (T, bool, error)
 	Create(ctx context.Context, item T) error

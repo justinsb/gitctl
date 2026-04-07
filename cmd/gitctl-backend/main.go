@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -24,35 +23,53 @@ var (
 	tcpAddr      = flag.String("tcp", "127.0.0.1:8484", "TCP address to listen on (empty to disable)")
 	username     = flag.String("username", "justinsb", "GitHub username to sync repositories for")
 	syncInterval = flag.Duration("sync-interval", 5*time.Minute, "How often to poll GitHub for repository updates")
-	dataDir      = flag.String("data-dir", defaultDataDir(), "Directory for persistent data (views, etc.)")
+	dataDir      = flag.String("data-dir", "", "Directory for persistent data (views, etc.); defaults to ~/.config/gitctl")
 )
 
 // defaultDataDir returns the platform default data directory for gitctl.
-func defaultDataDir() string {
-	if home, err := os.UserHomeDir(); err == nil {
-		return home + "/.config/gitctl"
+func defaultDataDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("cannot determine home directory: %w", err)
 	}
-	return "/tmp/gitctl-data"
+	return home + "/.config/gitctl", nil
 }
 
 func main() {
+	ctx := context.Background()
+	if err := Run(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+}
+
+func Run(ctx context.Context) error {
 	flag.Parse()
+
+	dir := *dataDir
+	if dir == "" {
+		var err error
+		dir, err = defaultDataDir()
+		if err != nil {
+			return err
+		}
+	}
 
 	// Remove existing socket if it exists
 	if err := os.RemoveAll(*socketPath); err != nil {
-		log.Fatalf("Failed to remove existing socket: %v", err)
+		return fmt.Errorf("failed to remove existing socket: %w", err)
 	}
 
 	// Create Unix domain socket listener
 	listener, err := net.Listen("unix", *socketPath)
 	if err != nil {
-		log.Fatalf("Failed to listen on %s: %v", *socketPath, err)
+		return fmt.Errorf("failed to listen on %s: %w", *socketPath, err)
 	}
 	defer os.Remove(*socketPath)
 
 	// Make socket accessible to all users
 	if err := os.Chmod(*socketPath, 0666); err != nil {
-		log.Fatalf("Failed to chmod socket: %v", err)
+		return fmt.Errorf("failed to chmod socket: %w", err)
 	}
 
 	// Set up per-resource stores.
@@ -66,22 +83,22 @@ func main() {
 	reviewCommentStore := storage.NewResourceStore[api.ReviewComment]()
 
 	// Set up persistent view store. Create the data directory if needed.
-	if err := os.MkdirAll(*dataDir, 0755); err != nil {
-		log.Fatalf("Failed to create data directory %s: %v", *dataDir, err)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create data directory %s: %w", dir, err)
 	}
-	viewsFile := *dataDir + "/views.json"
-	viewStore, err := storage.NewPersistentCRUDStore[api.View](
+	viewsFile := dir + "/views.json"
+	viewStore, err := storage.NewFileStorage[api.View](
 		func(v api.View) string { return v.Metadata.Name },
 		viewsFile,
 	)
 	if err != nil {
-		log.Fatalf("Failed to initialize view store: %v", err)
+		return fmt.Errorf("failed to initialize view store: %w", err)
 	}
-	log.Printf("View store initialized from %s", viewsFile)
+	fmt.Fprintf(os.Stderr, "View store initialized from %s\n", viewsFile)
 
 	githubClient := github.NewClient()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	// Start the controllers to poll GitHub and populate storage.
@@ -100,9 +117,9 @@ func main() {
 	// Start Unix socket server.
 	unixServer := &http.Server{Handler: handler}
 	go func() {
-		log.Printf("Backend server listening on %s", *socketPath)
+		fmt.Fprintf(os.Stderr, "Backend server listening on %s\n", *socketPath)
 		if err := unixServer.Serve(listener); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Failed to serve on Unix socket: %v", err)
+			fmt.Fprintf(os.Stderr, "Failed to serve on Unix socket: %v\n", err)
 		}
 	}()
 
@@ -111,13 +128,13 @@ func main() {
 	if *tcpAddr != "" {
 		tcpListener, err := net.Listen("tcp", *tcpAddr)
 		if err != nil {
-			log.Fatalf("Failed to listen on %s: %v", *tcpAddr, err)
+			return fmt.Errorf("failed to listen on %s: %w", *tcpAddr, err)
 		}
 		tcpServer = &http.Server{Handler: handler}
 		go func() {
-			log.Printf("Backend server listening on %s", *tcpAddr)
+			fmt.Fprintf(os.Stderr, "Backend server listening on %s\n", *tcpAddr)
 			if err := tcpServer.Serve(tcpListener); err != nil && err != http.ErrServerClosed {
-				log.Fatalf("Failed to serve on TCP: %v", err)
+				fmt.Fprintf(os.Stderr, "Failed to serve on TCP: %v\n", err)
 			}
 		}()
 	}
@@ -130,11 +147,12 @@ func main() {
 	fmt.Println("\nShutting down server...")
 	cancel()
 	if err := unixServer.Close(); err != nil {
-		log.Printf("Error closing Unix server: %v", err)
+		fmt.Fprintf(os.Stderr, "Error closing Unix server: %v\n", err)
 	}
 	if tcpServer != nil {
 		if err := tcpServer.Close(); err != nil {
-			log.Printf("Error closing TCP server: %v", err)
+			fmt.Fprintf(os.Stderr, "Error closing TCP server: %v\n", err)
 		}
 	}
+	return nil
 }
