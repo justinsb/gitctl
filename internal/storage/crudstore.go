@@ -7,6 +7,15 @@ import (
 	"sync"
 )
 
+// Storage is the interface implemented by both CRUDStore and FileStorage.
+type Storage[T any] interface {
+	List(ctx context.Context) ([]T, error)
+	Get(ctx context.Context, name string) (T, bool, error)
+	Create(ctx context.Context, item T) error
+	Update(ctx context.Context, item T) error
+	Delete(ctx context.Context, name string) error
+}
+
 // CRUDStore is a generic, thread-safe store for user-created resources.
 // Unlike ResourceStore (designed for controller bulk-sync), CRUDStore supports
 // individual Create, Update, and Delete operations.
