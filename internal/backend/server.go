@@ -28,7 +28,7 @@ type Server struct {
 	checkRunStore       *storage.ResourceStore[api.CheckRun]
 	prFileStore         *storage.ResourceStore[api.PRFile]
 	reviewCommentStore  *storage.ResourceStore[api.ReviewComment]
-	viewStore           *storage.CRUDStore[api.View]
+	viewStore           storage.CRUDStoreIface[api.View]
 	githubClient        *github.Client
 	mux                 *http.ServeMux
 }
@@ -43,7 +43,7 @@ func NewServer(
 	checkRunStore *storage.ResourceStore[api.CheckRun],
 	prFileStore *storage.ResourceStore[api.PRFile],
 	reviewCommentStore *storage.ResourceStore[api.ReviewComment],
-	viewStore *storage.CRUDStore[api.View],
+	viewStore storage.CRUDStoreIface[api.View],
 	githubClient *github.Client,
 ) *Server {
 	s := &Server{

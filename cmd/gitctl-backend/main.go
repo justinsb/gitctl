@@ -24,7 +24,16 @@ var (
 	tcpAddr      = flag.String("tcp", "127.0.0.1:8484", "TCP address to listen on (empty to disable)")
 	username     = flag.String("username", "justinsb", "GitHub username to sync repositories for")
 	syncInterval = flag.Duration("sync-interval", 5*time.Minute, "How often to poll GitHub for repository updates")
+	dataDir      = flag.String("data-dir", defaultDataDir(), "Directory for persistent data (views, etc.)")
 )
+
+// defaultDataDir returns the platform default data directory for gitctl.
+func defaultDataDir() string {
+	if home, err := os.UserHomeDir(); err == nil {
+		return home + "/.config/gitctl"
+	}
+	return "/tmp/gitctl-data"
+}
 
 func main() {
 	flag.Parse()
@@ -55,7 +64,20 @@ func main() {
 	checkRunStore := storage.NewResourceStore[api.CheckRun]()
 	prFileStore := storage.NewResourceStore[api.PRFile]()
 	reviewCommentStore := storage.NewResourceStore[api.ReviewComment]()
-	viewStore := storage.NewCRUDStore[api.View](func(v api.View) string { return v.Metadata.Name })
+
+	// Set up persistent view store. Create the data directory if needed.
+	if err := os.MkdirAll(*dataDir, 0755); err != nil {
+		log.Fatalf("Failed to create data directory %s: %v", *dataDir, err)
+	}
+	viewsFile := *dataDir + "/views.json"
+	viewStore, err := storage.NewPersistentCRUDStore[api.View](
+		func(v api.View) string { return v.Metadata.Name },
+		viewsFile,
+	)
+	if err != nil {
+		log.Fatalf("Failed to initialize view store: %v", err)
+	}
+	log.Printf("View store initialized from %s", viewsFile)
 
 	githubClient := github.NewClient()
 
