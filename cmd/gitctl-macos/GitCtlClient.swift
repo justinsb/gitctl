@@ -138,6 +138,28 @@ class GitCtlClient {
         }
     }
 
+    /// Parses a GitHub pulls/issues URL into a search query and display name.
+    /// Returns nil if the URL is not a supported GitHub URL.
+    func parseGitHubURL(urlString: String) async throws -> ParsedGitHubURL? {
+        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
+        components.path = "/apis/gitctl.justinsb.com/v1alpha1/parseurl"
+        components.queryItems = [URLQueryItem(name: "url", value: urlString)]
+
+        let (data, response) = try await session.data(from: components.url!)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            return nil
+        }
+        if httpResponse.statusCode == 422 {
+            return nil
+        }
+        guard httpResponse.statusCode == 200 else {
+            return nil
+        }
+
+        return try JSONDecoder().decode(ParsedGitHubURL.self, from: data)
+    }
+
     func executeView(name: String) async throws -> ViewResults {
         var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
         components.path = "/apis/gitctl.justinsb.com/v1alpha1/views/\(name)/results"

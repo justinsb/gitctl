@@ -180,3 +180,9 @@ struct CommentList: Codable {
     var metadata: ListMeta?
     var items: [Comment]
 }
+
+/// Result of parsing a GitHub URL into a search query and display name.
+struct ParsedGitHubURL: Codable {
+    var query: String
+    var displayName: String
+}

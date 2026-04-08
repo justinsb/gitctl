@@ -132,7 +132,7 @@ struct ContentView: SwiftUI.View {
                     }
                 }
                 .sheet(isPresented: $showCreateView) {
-                    CreateViewSheet { newView in
+                    CreateViewSheet(client: client) { newView in
                         Task {
                             do {
                                 _ = try await client.createView(view: newView)
@@ -200,40 +200,6 @@ struct ContentView: SwiftUI.View {
     }
 }
 
-// MARK: - GitHub URL Parsing
-
-/// Parses a GitHub URL like https://github.com/kubernetes/kops/pulls?q=is%3Apr+is%3Aopen
-/// and returns a (query, displayName) tuple suitable for creating a View.
-func parseGitHubURL(_ urlString: String) -> (query: String, displayName: String)? {
-    guard let url = URL(string: urlString),
-          let host = url.host,
-          host == "github.com" else { return nil }
-
-    let pathComponents = url.pathComponents.filter { $0 != "/" && !$0.isEmpty }
-    guard pathComponents.count >= 3 else { return nil }
-
-    let owner = pathComponents[0]
-    let repo = pathComponents[1]
-    let section = pathComponents[2]
-
-    guard section == "pulls" || section == "issues" else { return nil }
-
-    let repoFullName = "\(owner)/\(repo)"
-
-    let urlComponents = URLComponents(url: url, resolvingAgainstBaseURL: false)
-    let qParam = urlComponents?.queryItems?.first(where: { $0.name == "q" })?.value ?? ""
-
-    // Build search query: append repo: filter if not already present
-    var searchQuery = qParam
-    if !searchQuery.contains("repo:") {
-        searchQuery = searchQuery.isEmpty ? "repo:\(repoFullName)" : "\(searchQuery) repo:\(repoFullName)"
-    }
-
-    let displayName = qParam.isEmpty ? repoFullName : "\(repoFullName) - \(qParam)"
-
-    return (query: searchQuery, displayName: displayName)
-}
-
 // MARK: - Create View Sheet
 
 struct CreateViewSheet: SwiftUI.View {
@@ -242,6 +208,7 @@ struct CreateViewSheet: SwiftUI.View {
     @State private var displayName = ""
     @State private var query = ""
 
+    let client: GitCtlClient
     let onCreate: (View) -> Void
 
     var body: some SwiftUI.View {
@@ -251,12 +218,11 @@ struct CreateViewSheet: SwiftUI.View {
 
             TextField("GitHub URL (optional)", text: $urlInput)
                 .textFieldStyle(.roundedBorder)
-                .onChange(of: urlInput) {
-                    if let parsed = parseGitHubURL(urlInput) {
-                        query = parsed.query
-                        if displayName.isEmpty {
-                            displayName = parsed.displayName
-                        }
+                .task(id: urlInput) {
+                    guard let parsed = try? await client.parseGitHubURL(urlString: urlInput) else { return }
+                    query = parsed.query
+                    if displayName.isEmpty {
+                        displayName = parsed.displayName
                     }
                 }
 
