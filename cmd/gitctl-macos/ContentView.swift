@@ -68,6 +68,7 @@ struct ContentView: SwiftUI.View {
     @State private var showCreateView = false
     @State private var viewToEdit: View? = nil
     @State private var isDropTargeted = false
+    @State private var errorMessage: String?
 
     private let client = GitCtlClient()
 
@@ -154,7 +155,8 @@ struct ContentView: SwiftUI.View {
                                         _ = try await client.createView(view: newView)
                                         await loadViews()
                                     } catch {
-                                        // TODO: show error
+                                        print("Error creating view from drop: \(error)")
+                                        await MainActor.run { errorMessage = error.localizedDescription }
                                     }
                                 }
                             }
@@ -170,7 +172,8 @@ struct ContentView: SwiftUI.View {
                                 _ = try await client.createView(view: newView)
                                 await loadViews()
                             } catch {
-                                // TODO: show error
+                                print("Error creating view: \(error)")
+                                errorMessage = error.localizedDescription
                             }
                         }
                     }
@@ -206,6 +209,14 @@ struct ContentView: SwiftUI.View {
                     Text("Select a section")
                         .foregroundStyle(.secondary)
                 }
+            }
+            .alert("Error", isPresented: .init(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )) {
+                Button("OK") { errorMessage = nil }
+            } message: {
+                Text(errorMessage ?? "")
             }
         }
     }
