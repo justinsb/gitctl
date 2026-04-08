@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 // MARK: - Sidebar Selection
 
@@ -58,12 +59,15 @@ enum SelectableItem: Identifiable, Hashable {
     }
 }
 
+// MARK: - Content View
+
 struct ContentView: SwiftUI.View {
     @State private var sidebarSelection: SidebarSelection? = .feed
     @State private var selectedItem: SelectableItem?
     @State private var views: [View] = []
     @State private var showCreateView = false
     @State private var viewToEdit: View? = nil
+    @State private var isDropTargeted = false
 
     private let client = GitCtlClient()
 
@@ -120,10 +124,42 @@ struct ContentView: SwiftUI.View {
                                 }
                             }
                         }
+                        if isDropTargeted {
+                            Label("Drop to add view", systemImage: "plus.circle")
+                                .foregroundStyle(.secondary)
+                                .font(.caption)
+                        }
                         Button(action: { showCreateView = true }) {
                             Label("New View", systemImage: "plus")
                         }
                         .foregroundStyle(.secondary)
+                    }
+                    .onDrop(of: [UTType.url], isTargeted: $isDropTargeted) { providers in
+                        for provider in providers {
+                            provider.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil) { item, _ in
+                                guard let data = item as? Data,
+                                      let urlString = String(data: data, encoding: .utf8) else { return }
+                                Task {
+                                    guard let parsed = try? await client.parseGitHubURL(urlString: urlString) else { return }
+                                    let name = parsed.displayName.lowercased()
+                                        .replacingOccurrences(of: " ", with: "-")
+                                        .filter { $0.isLetter || $0.isNumber || $0 == "-" }
+                                    let newView = View(
+                                        apiVersion: "gitctl.justinsb.com/v1alpha1",
+                                        kind: "View",
+                                        metadata: ObjectMeta(name: name),
+                                        spec: ViewSpec(query: parsed.query, displayName: parsed.displayName)
+                                    )
+                                    do {
+                                        _ = try await client.createView(view: newView)
+                                        await loadViews()
+                                    } catch {
+                                        // TODO: show error
+                                    }
+                                }
+                            }
+                        }
+                        return true
                     }
                 }
                 .navigationTitle("gitctl")
