@@ -101,7 +101,7 @@ struct ContentView: SwiftUI.View {
                             Label("Repositories", systemImage: "folder")
                         }
                     }
-                    Section("Views") {
+                    Section {
                         ForEach(views) { view in
                             NavigationLink(value: SidebarSelection.view(view)) {
                                 Label(view.spec?.displayName ?? view.metadata?.name ?? "Untitled",
@@ -120,17 +120,19 @@ struct ContentView: SwiftUI.View {
                                 }
                             }
                         }
+                    } header: {
+                        HStack {
+                            Text("Views")
+                            Spacer()
+                            Button(action: { showCreateView = true }) {
+                                Image(systemName: "plus")
+                            }
+                            .buttonStyle(.plain)
+                            .help("Add View")
+                        }
                     }
                 }
                 .navigationTitle("gitctl")
-                .toolbar {
-                    ToolbarItem(placement: .automatic) {
-                        Button(action: { showCreateView = true }) {
-                            Image(systemName: "plus")
-                        }
-                        .help("Add View")
-                    }
-                }
                 .sheet(isPresented: $showCreateView) {
                     CreateViewSheet { newView in
                         Task {
