@@ -26,7 +26,7 @@ class BackendManager: ObservableObject {
 
         let proc = Process()
         proc.executableURL = backendURL
-        proc.arguments = ["-tcp=127.0.0.1:8484"]
+        proc.arguments = ["-socket=\(gitctlSocketPath)", "-tcp="]
 
         // Send backend logs to the system log.
         let pipe = Pipe()

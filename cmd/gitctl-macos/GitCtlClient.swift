@@ -1,11 +1,15 @@
 import Foundation
 
-/// HTTP client that talks to the gitctl backend over TCP.
+/// HTTP client that talks to the gitctl backend over a Unix domain socket.
 class GitCtlClient {
     let baseURL: URL
+    let session: URLSession
 
-    init(baseURL: URL = URL(string: "http://localhost:8484")!) {
+    init(baseURL: URL = URL(string: "http://localhost")!) {
         self.baseURL = baseURL
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [UnixSocketProtocol.self]
+        self.session = URLSession(configuration: config)
     }
 
     /// Creates a URLRequest with the Accept: text/html header so the backend
@@ -21,7 +25,7 @@ class GitCtlClient {
         components.path = "/apis/gitctl.justinsb.com/v1alpha1/gitrepos"
         components.queryItems = [URLQueryItem(name: "username", value: username)]
 
-        let (data, response) = try await URLSession.shared.data(from: components.url!)
+        let (data, response) = try await session.data(from: components.url!)
 
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw GitCtlError.badResponse
@@ -39,7 +43,7 @@ class GitCtlClient {
             URLQueryItem(name: "scope", value: scope),
         ]
 
-        let (data, response) = try await URLSession.shared.data(for: htmlRequest(url: components.url!))
+        let (data, response) = try await session.data(for: htmlRequest(url: components.url!))
 
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw GitCtlError.badResponse
@@ -57,7 +61,7 @@ class GitCtlClient {
             URLQueryItem(name: "scope", value: scope),
         ]
 
-        let (data, response) = try await URLSession.shared.data(for: htmlRequest(url: components.url!))
+        let (data, response) = try await session.data(for: htmlRequest(url: components.url!))
 
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw GitCtlError.badResponse
@@ -73,7 +77,7 @@ class GitCtlClient {
         var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
         components.path = "/apis/gitctl.justinsb.com/v1alpha1/views"
 
-        let (data, response) = try await URLSession.shared.data(from: components.url!)
+        let (data, response) = try await session.data(from: components.url!)
 
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw GitCtlError.badResponse
@@ -92,7 +96,7 @@ class GitCtlClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(view)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 201 else {
             throw GitCtlError.badResponse
@@ -111,7 +115,7 @@ class GitCtlClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(view)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw GitCtlError.badResponse
@@ -127,7 +131,7 @@ class GitCtlClient {
         var request = URLRequest(url: components.url!)
         request.httpMethod = "DELETE"
 
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (_, response) = try await session.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 204 else {
             throw GitCtlError.badResponse
