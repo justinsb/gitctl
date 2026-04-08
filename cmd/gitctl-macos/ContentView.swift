@@ -120,17 +120,13 @@ struct ContentView: SwiftUI.View {
                                 }
                             }
                         }
+                        Button(action: { showCreateView = true }) {
+                            Label("New View", systemImage: "plus")
+                        }
+                        .foregroundStyle(.secondary)
                     }
                 }
                 .navigationTitle("gitctl")
-                .toolbar {
-                    ToolbarItem(placement: .automatic) {
-                        Button(action: { showCreateView = true }) {
-                            Image(systemName: "plus")
-                        }
-                        .help("Add View")
-                    }
-                }
                 .sheet(isPresented: $showCreateView) {
                     CreateViewSheet { newView in
                         Task {
