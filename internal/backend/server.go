@@ -16,6 +16,7 @@ import (
 	"github.com/justinsb/gitctl/klient/meta"
 	"github.com/justinsb/gitctl/internal/github"
 	"github.com/justinsb/gitctl/internal/storage"
+	"github.com/justinsb/gitctl/internal/urlparse"
 )
 
 // Server is the HTTP server exposing the gitctl Kubernetes-style API.
@@ -67,6 +68,7 @@ func NewServer(
 	s.mux.HandleFunc(base+"/comments", s.handleListComments)
 	s.mux.HandleFunc(base+"/views", s.handleViews)
 	s.mux.HandleFunc(base+"/views/", s.handleViewByName)
+	s.mux.HandleFunc(base+"/parseurl", s.handleParseURL)
 
 	s.registerUIRoutes()
 
@@ -496,4 +498,28 @@ func (s *Server) handleViewResults(w http.ResponseWriter, r *http.Request, name 
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(results)
+}
+
+// handleParseURL handles GET /apis/.../parseurl?url=<github-url>.
+// It parses a GitHub pulls/issues URL and returns the search query and display name.
+func (s *Server) handleParseURL(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	rawURL := r.URL.Query().Get("url")
+	if rawURL == "" {
+		http.Error(w, "url query parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	result, ok := urlparse.ParseGitHubURL(rawURL)
+	if !ok {
+		http.Error(w, "not a supported GitHub URL", http.StatusUnprocessableEntity)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
 }

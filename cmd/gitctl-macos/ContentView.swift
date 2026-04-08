@@ -128,7 +128,7 @@ struct ContentView: SwiftUI.View {
                 }
                 .navigationTitle("gitctl")
                 .sheet(isPresented: $showCreateView) {
-                    CreateViewSheet { newView in
+                    CreateViewSheet(client: client) { newView in
                         Task {
                             do {
                                 _ = try await client.createView(view: newView)
@@ -200,15 +200,27 @@ struct ContentView: SwiftUI.View {
 
 struct CreateViewSheet: SwiftUI.View {
     @Environment(\.dismiss) private var dismiss
+    @State private var urlInput = ""
     @State private var displayName = ""
     @State private var query = ""
 
+    let client: GitCtlClient
     let onCreate: (View) -> Void
 
     var body: some SwiftUI.View {
         VStack(alignment: .leading, spacing: 16) {
             Text("New View")
                 .font(.headline)
+
+            TextField("GitHub URL (optional)", text: $urlInput)
+                .textFieldStyle(.roundedBorder)
+                .task(id: urlInput) {
+                    guard let parsed = try? await client.parseGitHubURL(urlString: urlInput) else { return }
+                    query = parsed.query
+                    if displayName.isEmpty {
+                        displayName = parsed.displayName
+                    }
+                }
 
             TextField("Display Name", text: $displayName)
                 .textFieldStyle(.roundedBorder)
