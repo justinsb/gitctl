@@ -138,8 +138,16 @@ struct ContentView: SwiftUI.View {
                     .onDrop(of: [UTType.url], isTargeted: $isDropTargeted) { providers in
                         for provider in providers {
                             provider.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil) { item, _ in
-                                guard let data = item as? Data,
-                                      let urlString = String(data: data, encoding: .utf8) else { return }
+                                // macOS may deliver the URL item as NSURL or NSData depending on the drag source.
+                                let urlString: String
+                                if let url = item as? URL {
+                                    urlString = url.absoluteString
+                                } else if let data = item as? Data,
+                                          let s = String(data: data, encoding: .utf8) {
+                                    urlString = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                                } else {
+                                    return
+                                }
                                 Task {
                                     guard let parsed = try? await client.parseGitHubURL(urlString: urlString) else { return }
                                     let name = parsed.displayName.lowercased()
