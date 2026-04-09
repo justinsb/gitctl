@@ -101,18 +101,21 @@ func Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	// Create a readiness tracker: we have 3 controllers, each will report ready after first sync.
+	readiness := backend.NewReadinessTracker(3)
+
 	// Start the controllers to poll GitHub and populate storage.
-	repoCtrl := controller.NewGitRepoController(githubClient, repoStore, *username, *syncInterval)
+	repoCtrl := controller.NewGitRepoController(githubClient, repoStore, *username, *syncInterval, readiness)
 	go repoCtrl.Run(ctx)
 
-	prCtrl := controller.NewPullRequestController(githubClient, prStore, commentStore, *username, *syncInterval)
+	prCtrl := controller.NewPullRequestController(githubClient, prStore, commentStore, *username, *syncInterval, readiness)
 	go prCtrl.Run(ctx)
 
-	issueCtrl := controller.NewIssueController(githubClient, issueStore, commentStore, *username, *syncInterval)
+	issueCtrl := controller.NewIssueController(githubClient, issueStore, commentStore, *username, *syncInterval, readiness)
 	go issueCtrl.Run(ctx)
 
 	// Create the API handler that reads from storage.
-	handler := backend.NewServer(repoStore, prStore, issueStore, commentStore, commitStore, checkRunStore, prFileStore, reviewCommentStore, viewStore, githubClient)
+	handler := backend.NewServer(repoStore, prStore, issueStore, commentStore, commitStore, checkRunStore, prFileStore, reviewCommentStore, viewStore, githubClient, readiness)
 
 	// Start Unix socket server.
 	unixServer := &http.Server{Handler: handler}

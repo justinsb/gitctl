@@ -6,7 +6,7 @@ class BackendManager: ObservableObject {
     private var process: Process?
     private let logger = Logger(subsystem: "com.justinsb.gitctl", category: "BackendManager")
 
-    /// Starts the backend binary from the app bundle.
+    /// Starts the backend binary from the app bundle, then waits for it to become ready.
     func start() {
         guard process == nil else { return }
 
@@ -53,7 +53,38 @@ class BackendManager: ObservableObject {
             logger.info("Started backend (pid \(proc.processIdentifier))")
         } catch {
             logger.error("Failed to start backend: \(error.localizedDescription)")
+            return
         }
+
+        // Wait for the backend to become ready by polling /readyz.
+        Task {
+            await waitForBackendReady()
+        }
+    }
+
+    /// Polls /readyz until the backend returns 200 OK or a timeout is reached.
+    /// Polls every 100ms for up to 10 seconds.
+    private func waitForBackendReady() async {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [UnixSocketProtocol.self]
+        let session = URLSession(configuration: config)
+
+        guard let readyzURL = URL(string: "http://localhost/readyz") else { return }
+
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline {
+            do {
+                let (_, response) = try await session.data(from: readyzURL)
+                if let http = response as? HTTPURLResponse, http.statusCode == 200 {
+                    logger.info("Backend is ready")
+                    return
+                }
+            } catch {
+                // Connection refused or other transient error — keep polling.
+            }
+            try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+        }
+        logger.warning("Backend did not become ready within 10 seconds")
     }
 
     /// Stops the backend process gracefully.
