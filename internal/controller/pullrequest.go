@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/justinsb/gitctl/internal/api"
+	"github.com/justinsb/gitctl/internal/backend"
 	"github.com/justinsb/gitctl/internal/github"
 	"github.com/justinsb/gitctl/internal/storage"
 )
@@ -19,16 +20,18 @@ type PullRequestController struct {
 	commentStore *storage.ResourceStore[api.Comment]
 	username     string
 	interval     time.Duration
+	readiness    *backend.ReadinessTracker
 }
 
 // NewPullRequestController creates a new controller that syncs PRs for the given username.
-func NewPullRequestController(client *github.Client, store *storage.ResourceStore[api.PullRequest], commentStore *storage.ResourceStore[api.Comment], username string, interval time.Duration) *PullRequestController {
+func NewPullRequestController(client *github.Client, store *storage.ResourceStore[api.PullRequest], commentStore *storage.ResourceStore[api.Comment], username string, interval time.Duration, readiness *backend.ReadinessTracker) *PullRequestController {
 	return &PullRequestController{
 		githubClient: client,
 		store:        store,
 		commentStore: commentStore,
 		username:     username,
 		interval:     interval,
+		readiness:    readiness,
 	}
 }
 
@@ -37,6 +40,7 @@ func (c *PullRequestController) Run(ctx context.Context) {
 	log.Printf("PullRequestController: starting sync for username %q every %v", c.username, c.interval)
 
 	c.sync(ctx)
+	c.readiness.ReportReady()
 
 	ticker := time.NewTicker(c.interval)
 	defer ticker.Stop()

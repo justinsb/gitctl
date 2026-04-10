@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/justinsb/gitctl/internal/api"
+	"github.com/justinsb/gitctl/internal/backend"
 	"github.com/justinsb/gitctl/internal/github"
 	"github.com/justinsb/gitctl/internal/storage"
 )
@@ -19,15 +20,17 @@ type GitRepoController struct {
 	store        *storage.ResourceStore[api.GitRepo]
 	username     string
 	interval     time.Duration
+	readiness    *backend.ReadinessTracker
 }
 
 // NewGitRepoController creates a new controller that syncs repos for the given username.
-func NewGitRepoController(client *github.Client, store *storage.ResourceStore[api.GitRepo], username string, interval time.Duration) *GitRepoController {
+func NewGitRepoController(client *github.Client, store *storage.ResourceStore[api.GitRepo], username string, interval time.Duration, readiness *backend.ReadinessTracker) *GitRepoController {
 	return &GitRepoController{
 		githubClient: client,
 		store:        store,
 		username:     username,
 		interval:     interval,
+		readiness:    readiness,
 	}
 }
 
@@ -38,6 +41,7 @@ func (c *GitRepoController) Run(ctx context.Context) {
 
 	// Sync immediately on startup.
 	c.sync(ctx)
+	c.readiness.ReportReady()
 
 	ticker := time.NewTicker(c.interval)
 	defer ticker.Stop()

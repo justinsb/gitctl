@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/justinsb/gitctl/internal/api"
+	"github.com/justinsb/gitctl/internal/backend"
 	"github.com/justinsb/gitctl/internal/github"
 	"github.com/justinsb/gitctl/internal/storage"
 )
@@ -19,16 +20,18 @@ type IssueController struct {
 	commentStore *storage.ResourceStore[api.Comment]
 	username     string
 	interval     time.Duration
+	readiness    *backend.ReadinessTracker
 }
 
 // NewIssueController creates a new controller that syncs issues for the given username.
-func NewIssueController(client *github.Client, store *storage.ResourceStore[api.Issue], commentStore *storage.ResourceStore[api.Comment], username string, interval time.Duration) *IssueController {
+func NewIssueController(client *github.Client, store *storage.ResourceStore[api.Issue], commentStore *storage.ResourceStore[api.Comment], username string, interval time.Duration, readiness *backend.ReadinessTracker) *IssueController {
 	return &IssueController{
 		githubClient: client,
 		store:        store,
 		commentStore: commentStore,
 		username:     username,
 		interval:     interval,
+		readiness:    readiness,
 	}
 }
 
@@ -37,6 +40,7 @@ func (c *IssueController) Run(ctx context.Context) {
 	log.Printf("IssueController: starting sync for username %q every %v", c.username, c.interval)
 
 	c.sync(ctx)
+	c.readiness.ReportReady()
 
 	ticker := time.NewTicker(c.interval)
 	defer ticker.Stop()

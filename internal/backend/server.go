@@ -31,6 +31,7 @@ type Server struct {
 	reviewCommentStore  *storage.ResourceStore[api.ReviewComment]
 	viewStore           storage.Storage[api.View]
 	githubClient        *github.Client
+	readiness           *ReadinessTracker
 	mux                 *http.ServeMux
 }
 
@@ -46,6 +47,7 @@ func NewServer(
 	reviewCommentStore *storage.ResourceStore[api.ReviewComment],
 	viewStore storage.Storage[api.View],
 	githubClient *github.Client,
+	readiness *ReadinessTracker,
 ) *Server {
 	s := &Server{
 		repoStore:          repoStore,
@@ -58,6 +60,7 @@ func NewServer(
 		reviewCommentStore: reviewCommentStore,
 		viewStore:          viewStore,
 		githubClient:       githubClient,
+		readiness:          readiness,
 		mux:                http.NewServeMux(),
 	}
 
@@ -69,10 +72,22 @@ func NewServer(
 	s.mux.HandleFunc(base+"/views", s.handleViews)
 	s.mux.HandleFunc(base+"/views/", s.handleViewByName)
 	s.mux.HandleFunc(base+"/parseurl", s.handleParseURL)
+	s.mux.HandleFunc("/readyz", s.handleReadyz)
 
 	s.registerUIRoutes()
 
 	return s
+}
+
+// handleReadyz implements the Kubernetes /readyz convention.
+// Returns 200 OK when the backend has completed its initial sync, 503 otherwise.
+func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
+	if s.readiness.IsReady() {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintln(w, "ok")
+	} else {
+		http.Error(w, "not ready", http.StatusServiceUnavailable)
+	}
 }
 
 // ServeHTTP implements http.Handler so Server can be passed directly to http.Serve.
