@@ -99,7 +99,9 @@ class GitCtlClient {
         let (data, response) = try await session.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 201 else {
-            throw GitCtlError.badResponse
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let body = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            throw GitCtlError.httpError(statusCode, body)
         }
 
         return try JSONDecoder().decode(View.self, from: data)
@@ -177,11 +179,15 @@ class GitCtlClient {
 
 enum GitCtlError: LocalizedError {
     case badResponse
+    case httpError(Int, String)  // statusCode, responseBody
 
     var errorDescription: String? {
         switch self {
         case .badResponse:
             return "Bad response from backend"
+        case .httpError(let code, let body):
+            let msg = body.isEmpty ? "HTTP \(code)" : "HTTP \(code): \(body)"
+            return "Backend error (\(msg))"
         }
     }
 }
