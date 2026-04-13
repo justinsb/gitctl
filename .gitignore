@@ -3,3 +3,4 @@ bin/
 /gitctl-backend
 .DS_Store
 /gitctl
+.vscode/
