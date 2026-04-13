@@ -20,6 +20,13 @@ func TestParseGitHubURL(t *testing.T) {
 			wantOK:          true,
 		},
 		{
+			name:            "pulls with sort:updated-desc qualifier",
+			input:           "https://github.com/kubernetes/kops/pulls?q=is%3Apr+is%3Aopen+sort%3Aupdated-desc",
+			wantQuery:       "is:pr is:open sort:updated-desc repo:kubernetes/kops",
+			wantDisplayName: "kubernetes/kops - is:pr is:open sort:updated-desc",
+			wantOK:          true,
+		},
+		{
 			name:            "pulls with no query string",
 			input:           "https://github.com/kubernetes/kops/pulls",
 			wantQuery:       "repo:kubernetes/kops",
