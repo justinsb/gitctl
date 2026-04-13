@@ -42,7 +42,7 @@ build-macos:
 
 # Build and run macOS native app
 run-macos: build-macos
-	@open bin/GitCtl.app
+	@bin/GitCtl.app/Contents/MacOS/GitCtl
 
 # Install macOS app to /Applications
 install-macos: build-macos

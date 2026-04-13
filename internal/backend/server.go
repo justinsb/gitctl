@@ -1,9 +1,11 @@
 package backend
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -13,26 +15,26 @@ import (
 	"mime"
 
 	"github.com/justinsb/gitctl/internal/api"
-	"github.com/justinsb/gitctl/klient/meta"
 	"github.com/justinsb/gitctl/internal/github"
 	"github.com/justinsb/gitctl/internal/storage"
 	"github.com/justinsb/gitctl/internal/urlparse"
+	"github.com/justinsb/gitctl/klient/meta"
 )
 
 // Server is the HTTP server exposing the gitctl Kubernetes-style API.
 type Server struct {
-	repoStore           *storage.ResourceStore[api.GitRepo]
-	prStore             *storage.ResourceStore[api.PullRequest]
-	issueStore          *storage.ResourceStore[api.Issue]
-	commentStore        *storage.ResourceStore[api.Comment]
-	commitStore         *storage.ResourceStore[api.PRCommit]
-	checkRunStore       *storage.ResourceStore[api.CheckRun]
-	prFileStore         *storage.ResourceStore[api.PRFile]
-	reviewCommentStore  *storage.ResourceStore[api.ReviewComment]
-	viewStore           storage.Storage[api.View]
-	githubClient        *github.Client
-	readiness           *ReadinessTracker
-	mux                 *http.ServeMux
+	repoStore          *storage.ResourceStore[api.GitRepo]
+	prStore            *storage.ResourceStore[api.PullRequest]
+	issueStore         *storage.ResourceStore[api.Issue]
+	commentStore       *storage.ResourceStore[api.Comment]
+	commitStore        *storage.ResourceStore[api.PRCommit]
+	checkRunStore      *storage.ResourceStore[api.CheckRun]
+	prFileStore        *storage.ResourceStore[api.PRFile]
+	reviewCommentStore *storage.ResourceStore[api.ReviewComment]
+	viewStore          storage.Storage[api.View]
+	githubClient       *github.Client
+	readiness          *ReadinessTracker
+	mux                *http.ServeMux
 }
 
 // NewServer creates a new HTTP Server and registers its routes.
@@ -377,8 +379,17 @@ func (s *Server) handleViews(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(list)
 
 	case http.MethodPost:
+		// TODO: Limit the request body size.
+		bodyBytes, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Printf("error reading request body: %v", err)
+			http.Error(w, "error reading request body", http.StatusBadRequest)
+			return
+		}
+		log.Printf("createView request body (%d bytes): %s", len(bodyBytes), string(bodyBytes))
 		var view api.View
-		if err := json.NewDecoder(r.Body).Decode(&view); err != nil {
+		if err := json.NewDecoder(bytes.NewReader(bodyBytes)).Decode(&view); err != nil {
+			log.Printf("createView invalid JSON: %v, body: %q", err, string(bodyBytes))
 			http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
 			return
 		}

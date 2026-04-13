@@ -73,19 +73,47 @@ class UnixSocketProtocol: URLProtocol {
         var path = url.path.isEmpty ? "/" : url.path
         if let query = url.query { path += "?\(query)" }
 
+        // URLSession often moves POST/PUT bodies onto httpBodyStream and leaves httpBody nil.
+        let body = Self.requestBodyData(req)
+
         var header = "\(method) \(path) HTTP/1.0\r\nHost: localhost\r\n"
         req.allHTTPHeaderFields?.forEach { key, value in
-            if key.lowercased() != "host" { header += "\(key): \(value)\r\n" }
+            let lower = key.lowercased()
+            // We set Content-Length from the resolved body; avoid duplicates / wrong values.
+            if lower != "host" && lower != "content-length" && lower != "transfer-encoding" {
+                header += "\(key): \(value)\r\n"
+            }
         }
 
         var payload = Data(header.utf8)
-        if let body = req.httpBody {
+        if let body, !body.isEmpty {
             payload += Data("Content-Length: \(body.count)\r\n\r\n".utf8)
             payload.append(body)
         } else {
             payload += Data("\r\n".utf8)
         }
         return payload
+    }
+
+    /// Resolves the request body. URLProtocol frequently receives nil `httpBody` with data on `httpBodyStream`.
+    private static func requestBodyData(_ req: URLRequest) -> Data? {
+        if let body = req.httpBody, !body.isEmpty {
+            return body
+        }
+        guard let stream = req.httpBodyStream else { return nil }
+        stream.open()
+        defer { stream.close() }
+        var result = Data()
+        let bufferSize = 8192
+        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+        defer { buffer.deallocate() }
+        while stream.hasBytesAvailable {
+            let n = stream.read(buffer, maxLength: bufferSize)
+            if n < 0 { return nil }
+            if n == 0 { break }
+            result.append(buffer, count: n)
+        }
+        return result.isEmpty ? nil : result
     }
 
     private func sendAll(sock: Int32, data: Data) throws {

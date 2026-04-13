@@ -101,6 +101,7 @@ class GitCtlClient {
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 201 else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
             let body = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            print("createView error: status=\(statusCode), response body=\(body)")
             throw GitCtlError.httpError(statusCode, body)
         }
 
