@@ -529,8 +529,10 @@ func (s *Server) handleParseURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("parseurl: parsing URL %q", rawURL)
 	result, ok := urlparse.ParseGitHubURL(rawURL)
 	if !ok {
+		log.Printf("parseurl: URL %q is not a supported GitHub URL", rawURL)
 		http.Error(w, "not a supported GitHub URL", http.StatusUnprocessableEntity)
 		return
 	}
